@@ -1,0 +1,8 @@
+python-pptx
+lxml
+typer
+pydantic
+orjson
+pytest
+rich
+jsonschema

@@ -1,0 +1,76 @@
+{
+  "metadata_version": "1.0.0",
+  "document_id": "doc_20260420_0001",
+  "task_id": "task_20260420_013",
+  "batch_id": "batch_20260420_a",
+  "parent_document_id": null,
+  "created_at": "2026-04-20T20:00:00+08:00",
+  "updated_at": "2026-04-20T20:03:00+08:00",
+  "status": "completed",
+  "source": {
+    "source_type": "pdf",
+    "source_name": "multimodal_icl_paper.pdf",
+    "source_uri": "file:///workspace/input/multimodal_icl_paper.pdf",
+    "source_id": null,
+    "mime_type": "application/pdf",
+    "file_size_bytes": 4821931,
+    "checksum": {
+      "algorithm": "sha256",
+      "value": "9c4e8b6d0b0d2fd23db0be1a8f4f9eab4c36237f48739ab72c8f0a54c2d1ef90"
+    },
+    "language": [
+      "en"
+    ],
+    "title": "A Study on Multimodal LLM",
+    "authors": [
+      "Author A",
+      "Author B"
+    ],
+    "published_at": "2025-11-10T00:00:00Z",
+    "collected_at": "2026-04-20T19:58:00+08:00",
+    "access_method": "upload",
+    "details": {
+      "page_count": 14,
+      "is_scanned": false,
+      "has_ocr": false,
+      "pdf_version": "1.7",
+      "bookmarks_detected": true
+    }
+  },
+  "output": {
+    "format": "markdown",
+    "markdown_file": "output.md",
+    "assets_dir": "assets/",
+    "image_reference_mode": "relative_path",
+    "markdown_encoding": "utf-8",
+    "markdown_dialect": "commonmark",
+    "has_front_matter": false
+  },
+  "content_profile": {
+    "char_count": 28640,
+    "word_count": 5120,
+    "line_count": 920,
+    "heading_count": 22,
+    "paragraph_count": 136,
+    "image_count": 9,
+    "table_count": 4,
+    "formula_count": 17,
+    "code_block_count": 0,
+    "list_count": 6,
+    "quote_block_count": 0,
+    "link_count": 18,
+    "footnote_count": 23,
+    "structure_level_max": 4,
+    "language_distribution": {
+      "en": 1.0
+    }
+  },
+  "downstream": {
+    "chunking_ready": true,
+    "recommended_chunk_strategy": "heading_based",
+    "sensitive_level": "normal",
+    "license": "unknown",
+    "dedup_key": "sha256:9c4e8b6d0b0d2fd23db0be1a8f4f9eab4c36237f48739ab72c8f0a54c2d1ef90",
+    "embedding_status": "pending"
+  }
+}

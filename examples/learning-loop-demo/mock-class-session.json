@@ -1,0 +1,29 @@
+{
+  "courseId": "future-school-demo",
+  "lessonId": "ai-three-elements",
+  "pageId": "page-1",
+  "startedAt": "2026-05-16T00:00:00.000Z",
+  "students": [
+    {
+      "learnerId": "student-a",
+      "questions": ["我还是不懂数据、算法、算力区别", "为什么只有算法不够？"],
+      "weakConcepts": ["算法与算力的区别"],
+      "misconceptions": ["把算力理解成算法更聪明"],
+      "quizResults": []
+    },
+    {
+      "learnerId": "student-b",
+      "questions": ["算力就是算法更聪明吧？"],
+      "weakConcepts": ["算法与算力的区别"],
+      "misconceptions": ["混淆算法和算力"],
+      "quizResults": []
+    },
+    {
+      "learnerId": "student-c",
+      "questions": ["FLOPS 怎么换算？"],
+      "weakConcepts": ["算力单位换算"],
+      "misconceptions": ["不清楚 PFLOPS 到 GFLOPS 的倍率"],
+      "quizResults": []
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+# Dependencies and local runtime state
+node_modules/
+.cache/
+.data/
+.env
+.env.*
+!.env.example
+
+# Large/private test artifacts
+tests/
+reports/
+测试集/
+删除审查区/
+
+# Local backups and generated bundles
+old/
+learning-assistant-agent-demo-ui-with-ppt-tests-*/
+learning-assistant-agent-demo-ui-with-ppt-tests-*.zip
+*.zip
+
+# Browser/test temporary output
+*.log
+*.tmp
+*.bak
+*.har
+videos/
+screenshots/
+
+# Build/runtime generated files
+__pycache__/
+*.py[cod]
+examples/**/output/
+examples/learning-loop-demo/*.png
+
+# Root-level scratch files produced during manual browser/debug sessions
+screenshot-*.png
+300px；
+{
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

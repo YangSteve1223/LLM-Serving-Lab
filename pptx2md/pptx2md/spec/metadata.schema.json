@@ -1,0 +1,375 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/metadata.schema.json",
+  "title": "Universal Source-to-Markdown Metadata Schema",
+  "description": "Schema for metadata describing documents converted from multiple source types into Markdown. This version excludes processing, quality, provenance, and custom.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "metadata_version",
+    "document_id",
+    "task_id",
+    "created_at",
+    "updated_at",
+    "status",
+    "source",
+    "output",
+    "content_profile"
+  ],
+  "properties": {
+    "metadata_version": {
+      "type": "string",
+      "description": "Version of the metadata specification.",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "document_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable identifier for the logical document."
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifier for the conversion task run."
+    },
+    "batch_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional identifier for the batch this task belongs to."
+    },
+    "parent_document_id": {
+      "description": "Optional parent document identifier for derived or revised documents.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "created_at": {
+      "$ref": "#/$defs/dateTimeString"
+    },
+    "updated_at": {
+      "$ref": "#/$defs/dateTimeString"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "processing",
+        "completed",
+        "failed",
+        "partial"
+      ]
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "output": {
+      "$ref": "#/$defs/output"
+    },
+    "content_profile": {
+      "$ref": "#/$defs/contentProfile"
+    },
+    "downstream": {
+      "$ref": "#/$defs/downstream"
+    }
+  },
+  "$defs": {
+    "nonNegativeInteger": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "dateTimeString": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "checksum": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "value"
+      ],
+      "properties": {
+        "algorithm": {
+          "type": "string",
+          "enum": [
+            "sha256",
+            "sha1",
+            "md5",
+            "blake3",
+            "other"
+          ]
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_type",
+        "source_name",
+        "source_uri",
+        "mime_type",
+        "checksum",
+        "language",
+        "collected_at",
+        "access_method",
+        "details"
+      ],
+      "properties": {
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "pdf",
+            "pptx",
+            "docx",
+            "html",
+            "webpage",
+            "wechat_article",
+            "audio",
+            "video",
+            "image",
+            "spreadsheet",
+            "other"
+          ]
+        },
+        "source_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_uri": {
+          "type": "string",
+          "minLength": 1,
+          "description": "URI, path, or URL to the source object."
+        },
+        "source_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file_size_bytes": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "checksum": {
+          "$ref": "#/$defs/checksum"
+        },
+        "language": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "title": {
+          "type": "string"
+        },
+        "authors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "published_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "collected_at": {
+          "$ref": "#/$defs/dateTimeString"
+        },
+        "access_method": {
+          "type": "string",
+          "enum": [
+            "upload",
+            "url_fetch",
+            "api",
+            "crawler",
+            "manual_import",
+            "bot_forward",
+            "local_file"
+          ]
+        },
+        "details": {
+          "type": "object",
+          "description": "Source-type-specific fields, such as page_count, slide_count, duration_seconds, etc.",
+          "additionalProperties": true
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "markdown_file",
+        "assets_dir",
+        "image_reference_mode"
+      ],
+      "properties": {
+        "format": {
+          "type": "string",
+          "const": "markdown"
+        },
+        "markdown_file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assets_dir": {
+          "type": "string"
+        },
+        "image_reference_mode": {
+          "type": "string",
+          "enum": [
+            "relative_path",
+            "absolute_path",
+            "url",
+            "embedded_base64",
+            "none"
+          ]
+        },
+        "markdown_encoding": {
+          "type": "string"
+        },
+        "markdown_dialect": {
+          "type": "string"
+        },
+        "has_front_matter": {
+          "type": "boolean"
+        }
+      }
+    },
+    "contentProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "char_count",
+        "heading_count",
+        "image_count",
+        "table_count",
+        "formula_count",
+        "link_count",
+        "language_distribution"
+      ],
+      "properties": {
+        "char_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "word_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "line_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "heading_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "paragraph_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "image_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "table_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "formula_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "code_block_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "list_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "quote_block_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "link_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "footnote_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "structure_level_max": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "segment_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "speaker_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "timestamped": {
+          "type": "boolean"
+        },
+        "language_distribution": {
+          "type": "object",
+          "description": "Map from language code to proportion, e.g. {'zh': 0.8, 'en': 0.2}.",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
+    },
+    "downstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "chunking_ready": {
+          "type": "boolean"
+        },
+        "recommended_chunk_strategy": {
+          "type": "string",
+          "enum": [
+            "heading_based",
+            "page_based",
+            "slide_based",
+            "time_based",
+            "paragraph_based",
+            "custom"
+          ]
+        },
+        "sensitive_level": {
+          "type": "string",
+          "enum": [
+            "normal",
+            "internal",
+            "confidential",
+            "restricted"
+          ]
+        },
+        "license": {
+          "type": "string"
+        },
+        "dedup_key": {
+          "type": "string"
+        },
+        "embedding_status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "completed",
+            "failed",
+            "skipped"
+          ]
+        }
+      }
+    }
+  }
+}

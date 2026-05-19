@@ -1,0 +1,32 @@
+[
+  {
+    "learnerId": "student-a",
+    "profile": "混淆算法与算力",
+    "question": "算力是不是算法更聪明？",
+    "wrongAnswer": "算力就是算法更聪明。"
+  },
+  {
+    "learnerId": "student-b",
+    "profile": "不理解数据作用",
+    "question": "没有数据是不是也能靠算法训练？",
+    "wrongAnswer": "数据只是例子，不太重要。"
+  },
+  {
+    "learnerId": "student-c",
+    "profile": "会概念但不会 FLOPS 换算",
+    "question": "PFLOPS 和 GFLOPS 怎么换算？",
+    "wrongAnswer": "1 PFLOPS 等于 1000 GFLOPS。"
+  },
+  {
+    "learnerId": "student-d",
+    "profile": "想要拓展资源",
+    "question": "有没有适合初学者的视频资源？",
+    "wrongAnswer": "我想先看资源再回答。"
+  },
+  {
+    "learnerId": "student-e",
+    "profile": "已经掌握，想要挑战题",
+    "question": "能给我一个更难的检查题吗？",
+    "wrongAnswer": "数据、算法、算力需要互相支撑。"
+  }
+]

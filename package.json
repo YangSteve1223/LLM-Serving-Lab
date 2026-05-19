@@ -1,0 +1,26 @@
+{
+  "name": "learning-assistant-agent-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Embeddable learning assistant agent MVP with local markdown wiki retrieval.",
+  "scripts": {
+    "test": "node --test tests/learningAssistant/context-awareness.test.ts tests/learningAssistant/agent-flow.test.ts tests/learningAssistant/evaluator-stress.test.ts tests/learningAssistant/quality-convergence.test.ts tests/learningAssistant/slide-preview.test.ts",
+    "demo": "node examples/learning-assistant-demo/run-demo.ts",
+    "evaluate": "node scripts/run-evaluation.ts",
+    "evaluate:kimi": "node scripts/run-kimi-evaluation.ts",
+    "test:2009": "node tests/TEST-2009/run-test-2009.ts",
+    "test:learning-loop": "node --test tests/learning-loop/*.test.ts",
+    "test:demo-ux": "node tests/TEST-DEMO-UX/run-test-demo-ux.ts",
+    "test:future-school": "node tests/TEST-FUTURE-SCHOOL/run-test-future-school.ts",
+    "test:learning-loop-quality": "node tests/TEST-LEARNING-LOOP-QUALITY/run-test-learning-loop-quality.ts",
+    "demo:learning-loop": "node examples/learning-loop-demo/run-learning-loop-demo.ts",
+    "demo:future-school": "node examples/future-school-demo/run-future-school-demo.ts",
+    "ui": "node examples/learning-assistant-ui/server.ts",
+    "screenshots": "node scripts/capture-ui-screenshots.mjs",
+    "pptx:md": "node scripts/pptx-to-markdown.ts"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

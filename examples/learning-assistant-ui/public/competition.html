@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>未来学校 AI 伴学智能体</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <style>
+      body {
+        background: #f4f7f9;
+      }
+
+      .competition-page {
+        min-height: 100dvh;
+        padding-bottom: 44px;
+      }
+
+      .hero-band {
+        position: relative;
+        min-height: min(62vh, 620px);
+        display: grid;
+        align-content: center;
+        padding: clamp(42px, 7vw, 92px) 22px;
+        overflow: hidden;
+        background: #172436 url("/assets/future-school-demo-ui.png") center / cover no-repeat;
+        color: white;
+      }
+
+      .hero-band::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: rgba(10, 20, 31, 0.64);
+      }
+
+      .hero-copy {
+        position: relative;
+        z-index: 1;
+        width: min(1180px, 100%);
+        margin: 0 auto;
+      }
+
+      .hero-band .eyebrow {
+        color: #b9e1d1;
+      }
+
+      .hero-band h1 {
+        max-width: 780px;
+        margin: 0;
+        font-size: clamp(38px, 6vw, 72px);
+        line-height: 1.04;
+        letter-spacing: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .hero-break {
+        display: none;
+      }
+
+      .hero-band p {
+        max-width: 760px;
+        margin: 18px 0 0;
+        color: #eef5f8;
+        font-size: 20px;
+        line-height: 1.65;
+        overflow-wrap: anywhere;
+      }
+
+      .demo-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 26px;
+      }
+
+      .demo-actions a {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        max-width: 100%;
+        text-decoration: none;
+        border: 1px solid rgba(255, 255, 255, 0.42);
+        border-radius: 8px;
+        padding: 10px 15px;
+        color: white;
+        background: rgba(255, 255, 255, 0.1);
+        font-weight: 800;
+      }
+
+      .demo-actions a.primary {
+        background: #f6fbff;
+        color: #123047;
+        border-color: #f6fbff;
+      }
+
+      .page-section {
+        width: min(1180px, calc(100% - 44px));
+        margin: 24px auto 0;
+      }
+
+      .section-heading {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 14px;
+      }
+
+      .section-heading h2 {
+        margin: 0;
+        font-size: clamp(24px, 3vw, 34px);
+        letter-spacing: 0;
+      }
+
+      .section-heading p {
+        max-width: 520px;
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.65;
+      }
+
+      .metric-strip,
+      .role-grid,
+      .feature-grid,
+      .value-grid {
+        display: grid;
+        gap: 14px;
+      }
+
+      .metric-strip {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .role-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .value-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .feature-grid {
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+      }
+
+      .demo-card,
+      .value-card,
+      .metric-card,
+      .flow-list li {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: white;
+        box-shadow: 0 12px 28px rgba(20, 32, 51, 0.06);
+      }
+
+      .demo-card {
+        padding: 18px;
+      }
+
+      .value-card {
+        padding: 18px;
+      }
+
+      .value-card strong {
+        display: block;
+        margin-bottom: 10px;
+        color: var(--blue);
+        font-size: 20px;
+      }
+
+      .value-card p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.65;
+      }
+
+      .demo-card h2,
+      .demo-card h3,
+      .metric-card strong {
+        margin-top: 0;
+      }
+
+      .demo-card p {
+        color: var(--muted);
+        line-height: 1.65;
+      }
+
+      .metric-card {
+        padding: 14px;
+      }
+
+      .metric-card strong {
+        display: block;
+        font-size: 28px;
+        color: var(--blue);
+      }
+
+      .metric-card span {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+
+      .path-label {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        margin-bottom: 12px;
+        border-radius: 999px;
+        padding: 4px 10px;
+        background: #eef6f1;
+        color: var(--green);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .path-label.teacher {
+        background: #fff5e4;
+        color: var(--gold);
+      }
+
+      .path-label.knowledge {
+        background: #eef4ff;
+        color: var(--blue);
+      }
+
+      .flow-list {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin: 0;
+        padding: 0;
+        counter-reset: step;
+      }
+
+      .flow-list li {
+        min-height: 108px;
+        list-style: none;
+        padding: 14px;
+        color: var(--ink);
+        line-height: 1.55;
+      }
+
+      .flow-list li::before {
+        counter-increment: step;
+        content: counter(step);
+        display: inline-grid;
+        place-items: center;
+        width: 26px;
+        height: 26px;
+        margin-bottom: 10px;
+        border-radius: 50%;
+        background: #eaf4ff;
+        color: var(--blue);
+        font-weight: 800;
+      }
+
+      .concept-map-preview {
+        min-height: 320px;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .concept-node-preview {
+        position: absolute;
+        width: 132px;
+        min-height: 58px;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px;
+        background: #f8fbfd;
+        text-align: center;
+        font-weight: 800;
+      }
+
+      .concept-node-preview.mastered {
+        top: 36px;
+        left: 24px;
+        border-color: #acd8bf;
+        background: #edf9f3;
+        color: var(--green);
+      }
+
+      .concept-node-preview.learning {
+        top: 132px;
+        left: calc(50% - 66px);
+        border-color: #aed1ed;
+        background: #edf6ff;
+        color: var(--blue);
+      }
+
+      .concept-node-preview.weak {
+        right: 24px;
+        bottom: 44px;
+        border-color: #e7c98a;
+        background: #fff8ea;
+        color: var(--gold);
+      }
+
+      .concept-line {
+        position: absolute;
+        height: 2px;
+        background: #c9d7df;
+        transform-origin: left center;
+      }
+
+      .concept-line.one {
+        top: 110px;
+        left: 135px;
+        width: 180px;
+        transform: rotate(20deg);
+      }
+
+      .concept-line.two {
+        right: 130px;
+        bottom: 116px;
+        width: 190px;
+        transform: rotate(-24deg);
+      }
+
+      .guardrail-list {
+        display: grid;
+        gap: 10px;
+        margin: 0;
+        padding: 0;
+      }
+
+      .guardrail-list li {
+        list-style: none;
+        border-left: 4px solid var(--green);
+        padding: 8px 10px;
+        background: #f7fbf9;
+        color: var(--ink);
+        line-height: 1.55;
+      }
+
+      @media (max-width: 920px) {
+        .section-heading {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .metric-strip,
+        .role-grid,
+        .feature-grid,
+        .value-grid,
+        .flow-list {
+          grid-template-columns: 1fr;
+        }
+
+        .hero-band {
+          min-height: 58vh;
+        }
+
+        .hero-band h1 {
+          font-size: clamp(32px, 9vw, 42px);
+          line-height: 1.08;
+        }
+
+        .hero-break {
+          display: block;
+        }
+
+        .hero-band p {
+          font-size: 17px;
+          word-break: break-word;
+        }
+
+        .concept-map-preview {
+          min-height: 280px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="competition-page">
+      <section class="hero-band" data-testid="competition-hero" role="img" aria-label="未来学校 Demo 界面截图背景">
+        <div class="hero-copy">
+          <p class="eyebrow">Future School Demo</p>
+          <h1>未来学校 AI <span class="hero-break"></span>伴学智能体</h1>
+          <p>
+            一个嵌入学习平台的智能体：它能感知当前课件，解释学生问题，生成小测检查理解，记录错因与复习任务，并把班级共性问题沉淀给教师和知识库。
+          </p>
+          <div class="demo-actions">
+            <a class="primary" href="/?mode=demo">打开学生学习 Demo</a>
+            <a href="/?mode=developer">打开开发模式</a>
+            <a href="/api/config">本地配置</a>
+            <a href="/competition">刷新展示页</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-section metric-strip" data-testid="demo-metrics">
+        <article class="metric-card">
+          <strong>8</strong>
+          <span>学习闭环阶段，从当前页理解到复习任务</span>
+        </article>
+        <article class="metric-card">
+          <strong>5</strong>
+          <span>模拟学生画像，用于班级共性洞察</span>
+        </article>
+        <article class="metric-card">
+          <strong>3</strong>
+          <span>证据层：当前页、deck context、知识库</span>
+        </article>
+        <article class="metric-card">
+          <strong>0</strong>
+          <span>API Key 不落盘，真实模型仅临时使用</span>
+        </article>
+      </section>
+
+      <section class="page-section">
+        <div class="section-heading">
+          <h2>一条完整学习闭环</h2>
+          <p>演示重点是每一步是否可解释、可追踪、可复习，并能沉淀给教师和知识库。</p>
+        </div>
+        <div class="value-grid" data-testid="core-values">
+          <article class="value-card">
+            <strong>可解释</strong>
+            <p>每次回答都标注依据：来自当前页、课件上下文、教师讲稿、知识库或通用知识。</p>
+          </article>
+          <article class="value-card">
+            <strong>可追踪</strong>
+            <p>系统记录学生提问、小测结果、错因和掌握状态，形成学习记忆。</p>
+          </article>
+          <article class="value-card">
+            <strong>可复习</strong>
+            <p>答错或薄弱概念会自动生成复习任务，帮助学生间隔巩固。</p>
+          </article>
+          <article class="value-card">
+            <strong>可沉淀</strong>
+            <p>班级共性困惑会反馈给教师，并形成知识库改进建议。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="page-section">
+        <ol class="flow-list" data-testid="learning-loop-flow">
+          <li>感知当前 PPT 页、讲稿、deck context 和学习画像</li>
+          <li>基于证据回答问题，证据不足时拒绝编造</li>
+          <li>诊断理解状态，识别薄弱概念和误区</li>
+          <li>生成本页小测，围绕当前页核心概念检查理解</li>
+          <li>批改答案，给出错因反馈和下一步行动</li>
+          <li>写入学习记忆，形成个人薄弱概念轨迹</li>
+          <li>安排复习任务，帮助学生间隔巩固</li>
+          <li>推荐带看前问题和看后检查题的学习资源</li>
+          <li>教师查看班级洞察和干预建议</li>
+          <li>系统提出知识库沉淀建议</li>
+        </ol>
+      </section>
+
+      <section class="page-section role-grid">
+        <article class="demo-card" data-testid="demo-path-student">
+          <span class="path-label">学生端</span>
+          <h3>当前页伴学</h3>
+          <p>学生边看课件边提问，系统围绕当前页解释概念，生成小测，批改错因，并把薄弱概念写入学习记忆。</p>
+        </article>
+        <article class="demo-card" data-testid="demo-path-teacher">
+          <span class="path-label teacher">教师端</span>
+          <h3>课后洞察</h3>
+          <p>教师看到共性困惑、高频问题、薄弱概念排行、mini lesson 建议和下一节课可执行的干预方向。</p>
+        </article>
+        <article class="demo-card" data-testid="demo-path-knowledge">
+          <span class="path-label knowledge">知识库</span>
+          <h3>维护闭环</h3>
+          <p>当检索为空、证据不足或误区反复出现，系统生成知识库写回建议，把教学现场的问题变成可维护资产。</p>
+        </article>
+      </section>
+
+      <section class="page-section feature-grid">
+        <article class="demo-card concept-map-preview" data-testid="concept-map-preview">
+          <h3>概念地图快照</h3>
+          <span class="concept-line one"></span>
+          <span class="concept-line two"></span>
+          <span class="concept-node-preview mastered">数据<br />已掌握</span>
+          <span class="concept-node-preview learning">AI 三要素<br />学习中</span>
+          <span class="concept-node-preview weak">算法与算力<br />需复习</span>
+        </article>
+        <article class="demo-card">
+          <h3>质量护栏</h3>
+          <ul class="guardrail-list">
+            <li>上下文感知不强行套当前页，回答必须匹配真实问题意图。</li>
+            <li>引用必须支撑答案，检索结果低相关时不冒充证据。</li>
+            <li>公式、预算、专有名词没有明确依据时拒答。</li>
+            <li>demo 面向非技术用户，debug 与 raw evidence 保留在 developer 模式。</li>
+          </ul>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Learning Assistant Agent</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main id="appShell" class="app-shell" data-mode="demo">
+      <header class="topbar">
+        <div class="brand-block">
+          <p class="eyebrow">Learning Assistant</p>
+          <h1>学习助教</h1>
+          <p id="topMaterialLine" class="top-subtitle">正在准备学习材料</p>
+        </div>
+        <div class="top-actions">
+          <span id="llmStatus" class="status-pill">模型未连接</span>
+          <span id="modeStatus" class="status-pill">回答模式：等待提问</span>
+          <span id="confidenceStatus" class="status-pill">置信度：暂无</span>
+          <button id="modelSettingsToggle" class="ghost-button" type="button">模型设置</button>
+          <button id="modeToggle" class="ghost-button" type="button">开发模式</button>
+        </div>
+      </header>
+
+      <div id="settingsOverlay" class="settings-overlay" hidden></div>
+      <section id="modelSettingsPanel" class="settings-drawer" data-testid="model-settings-drawer" hidden>
+        <header class="drawer-head">
+          <div>
+            <p class="panel-kicker">Settings</p>
+            <h2>模型设置</h2>
+          </div>
+          <button id="closeModelSettings" class="ghost-button" type="button">关闭</button>
+        </header>
+        <div class="settings-grid">
+          <label>
+            学习材料
+            <select id="materialSelect"></select>
+          </label>
+          <label class="path-input">
+            文件路径
+            <input id="filePathInput" type="text" placeholder="输入 .pptx 或 .md 路径" />
+          </label>
+          <button id="loadButton" class="primary-button" type="button">加载材料</button>
+          <label>
+            学生画像
+            <select id="learnerLevel">
+              <option value="beginner">初学者</option>
+              <option value="intermediate">进阶学习者</option>
+              <option value="advanced">高阶学习者</option>
+              <option value="unknown">自动判断</option>
+            </select>
+          </label>
+          <label>
+            回答风格
+            <select id="stylePreference">
+              <option value="auto">自动选择</option>
+              <option value="direct">直接解释</option>
+              <option value="concise">简洁回答</option>
+              <option value="step_by_step">分步讲解</option>
+              <option value="analogy">生活类比</option>
+              <option value="socratic">启发式引导</option>
+              <option value="exam_focused">考试重点</option>
+              <option value="deep_dive">深入拓展</option>
+              <option value="beginner_friendly">新手友好</option>
+            </select>
+          </label>
+          <label>
+            LLM Provider
+            <select id="llmProvider">
+              <option value="kimi">KIMI / Moonshot</option>
+              <option value="openai-compatible">OpenAI-compatible</option>
+            </select>
+          </label>
+          <label>
+            API Key
+            <input id="llmApiKey" type="password" autocomplete="off" placeholder="只在本次请求中使用，不保存" />
+          </label>
+          <label>
+            Model
+            <input id="llmModel" type="text" placeholder="kimi-k2.5" />
+          </label>
+          <label>
+            Base URL
+            <input id="llmBaseUrl" type="text" placeholder="https://api.moonshot.cn/v1" />
+          </label>
+          <label>
+            Grounding
+            <select id="groundingMode">
+              <option value="allow_general_knowledge_with_label">允许通用知识并标注</option>
+              <option value="course_grounded_only">只基于课程资料</option>
+            </select>
+          </label>
+          <label class="check-row">
+            <input id="requireRealLlm" type="checkbox" />
+            必须使用真实模型
+          </label>
+          <div class="settings-subsection">
+            <strong>资源搜索设置</strong>
+            <p>搜索 Key 仅用于本次会话，不保存。未配置时不会生成假资源。</p>
+          </div>
+          <label>
+            搜索服务
+            <select id="resourceSearchProvider">
+              <option value="auto">自动选择</option>
+              <option value="tavily">Tavily</option>
+              <option value="bing">Bing Search</option>
+              <option value="serpapi">SerpAPI</option>
+              <option value="manual">教师资源库 JSON</option>
+            </select>
+          </label>
+          <label>
+            Tavily API Key
+            <input id="tavilyApiKey" type="password" autocomplete="off" placeholder="仅用于本次资源搜索，不保存" />
+          </label>
+          <label>
+            Bing Search API Key
+            <input id="bingSearchApiKey" type="password" autocomplete="off" placeholder="仅用于本次资源搜索，不保存" />
+          </label>
+          <label>
+            SerpAPI Key
+            <input id="serpApiKey" type="password" autocomplete="off" placeholder="仅用于本次资源搜索，不保存" />
+          </label>
+        </div>
+        <p class="privacy-note">API Key 仅用于本次会话请求，不会写入报告或本地文件。</p>
+      </section>
+
+      <section class="learning-layout" data-testid="learning-layout">
+        <section class="courseware-panel" data-testid="courseware-panel">
+          <header class="panel-head">
+            <div>
+              <p class="panel-kicker">当前课件</p>
+              <h2 id="pageTitle">未加载</h2>
+            </div>
+            <span id="pageCounter" class="page-pill">0 / 0</span>
+          </header>
+
+          <figure id="slidePreviewShell" class="slide-stage" data-testid="slide-stage">
+            <div id="slidePreviewStatus" class="preview-status">当前页预览生成中……</div>
+            <img id="slidePreview" data-testid="slide-preview" alt="当前 PPT 页预览" hidden />
+          </figure>
+
+          <div class="slide-controls">
+            <button id="prevPage" type="button">上一页</button>
+            <input id="pageIndexInput" type="number" min="1" value="1" />
+            <button id="goPage" type="button">跳转</button>
+            <button id="nextPage" type="button">下一页</button>
+            <button id="zoomSlide" type="button">放大</button>
+            <button id="openPageTextDrawer" type="button">解析文本</button>
+          </div>
+
+          <div id="pageNotice" class="page-notice">加载材料后，下一次提问会基于当前显示的页面。</div>
+        </section>
+
+        <section class="assistant-panel" data-testid="assistant-panel">
+          <header class="assistant-head">
+            <div>
+              <p class="panel-kicker">AI 助教</p>
+              <h2>结合当前页回答</h2>
+            </div>
+            <span id="skillStatus" class="soft-pill">知识库：待使用</span>
+          </header>
+
+          <div id="chatWindow" class="chat-window" data-testid="chat-window">
+            <div class="assistant-empty-state">
+              <strong>可以直接问当前页。</strong>
+              <span>例如“这页主要讲什么？”、“这里最容易混淆的点是什么？”</span>
+              <span id="llmHint">当前未配置真实模型。可以先配置 API Key，或只查看课件。</span>
+            </div>
+          </div>
+
+          <form id="askForm" class="ask-box" data-testid="ask-box">
+            <div class="ask-toolbar">
+              <button id="quickPromptsToggle" class="quick-prompts-toggle" data-testid="quick-prompts-toggle" type="button">常用问题</button>
+            </div>
+            <div id="quickPromptsPopover" class="quick-prompts-popover" data-testid="quick-prompts-popover" hidden>
+              <div id="questionList" class="quick-prompts-grid" data-testid="demo-quick-prompts"></div>
+              <details id="developerStressPanel" class="developer-stress-panel" data-testid="developer-stress-questions" hidden>
+                <summary>开发测试问题</summary>
+                <div id="testQuestionList" class="quick-prompts-grid developer-stress-grid"></div>
+              </details>
+            </div>
+            <div class="ask-input-row">
+              <textarea id="queryInput" rows="3" placeholder="向助教提问，Enter 发送，Shift + Enter 换行"></textarea>
+              <button type="submit" id="askButton">提问</button>
+            </div>
+          </form>
+
+          <div class="assistant-tool-strip" data-testid="assistant-tool-strip">
+            <button id="learningToolsToggle" type="button" data-testid="learning-tools-toggle">学习工具</button>
+            <button id="openQuizShortcut" type="button">生成本页小测</button>
+          </div>
+        </section>
+      </section>
+
+      <div id="learningToolsOverlay" class="learning-tools-overlay" hidden></div>
+      <aside id="learningToolsDrawer" class="learning-tools-drawer" data-testid="learning-tools-drawer" hidden>
+        <header class="learning-tools-header">
+          <div>
+            <p class="eyebrow">Learning Loop</p>
+            <h2>学习闭环工具</h2>
+          </div>
+          <button id="closeLearningTools" class="ghost-button" type="button">关闭</button>
+        </header>
+        <section class="learning-loop-progress" data-testid="learning-loop-progress">
+          <div>
+            <strong>当前阶段</strong>
+            <span id="loopStageLabel">当前页理解</span>
+          </div>
+          <div>
+            <strong>下一步</strong>
+            <span id="loopNextAction">向助教提问或生成本页小测</span>
+          </div>
+          <button id="sessionReportButton" type="button">生成学习报告</button>
+        </section>
+        <nav class="learning-tools-tabs" role="tablist">
+          <button id="generateQuizButton" type="button" data-loop-tab="quiz">本页小测</button>
+          <button id="memoryButton" type="button" data-loop-tab="memory">学习记忆</button>
+          <button id="resourcesButton" type="button" data-loop-tab="resources">推荐资源</button>
+          <button id="teacherButton" type="button" data-loop-tab="teacher">教师视图</button>
+        </nav>
+        <section id="learningLoopOutput" class="learning-loop-output" data-testid="learning-loop-output">
+          <div class="loop-empty">
+            <h3>本页小测</h3>
+            <p>点击“生成本页小测”，我会根据当前 PPT 页生成 2-3 道检查理解的小题。</p>
+            <button type="button" class="drawer-generate-quiz-button">生成本页小测</button>
+            <button type="button" class="drawer-session-report-button">生成本页学习报告</button>
+          </div>
+        </section>
+      </aside>
+
+      <section class="bottom-drawer">
+        <details id="evidenceDetails" class="drawer-section">
+          <summary>证据与引用</summary>
+          <div id="citationSummary" class="reference-summary"></div>
+          <div class="debug-grid">
+            <div class="debug-card wide">
+              <h3>引用来源</h3>
+              <div id="citationList" class="citation-list"></div>
+            </div>
+            <div class="debug-card wide">
+              <h3>Selected Evidence</h3>
+              <div id="selectedEvidenceList" class="citation-list"></div>
+            </div>
+            <div class="debug-card wide">
+              <h3>Rejected Evidence</h3>
+              <div id="rejectedEvidenceList" class="citation-list"></div>
+            </div>
+          </div>
+        </details>
+
+        <details id="debugPanel" class="drawer-section">
+          <summary>开发调试</summary>
+          <div class="debug-grid">
+            <div class="debug-card">
+              <h3>生成模式</h3>
+              <div id="generationBox" class="trace-box"></div>
+            </div>
+            <div class="debug-card">
+              <h3>Answerability</h3>
+              <div id="answerabilityBox" class="trace-box"></div>
+            </div>
+            <div class="debug-card">
+              <h3>决策摘要</h3>
+              <div id="traceBox" class="trace-box"></div>
+            </div>
+            <div class="debug-card">
+              <h3>教学策略</h3>
+              <div id="policyBox" class="key-grid"></div>
+            </div>
+            <div class="debug-card">
+              <h3>Skill / Retrieval</h3>
+              <div id="skillList" class="trace-box"></div>
+            </div>
+            <div class="debug-card">
+              <h3>上下文使用</h3>
+              <div id="usedContext" class="key-grid"></div>
+            </div>
+            <div class="debug-card wide">
+              <details open>
+                <summary>页级 Markdown</summary>
+                <pre id="pageMarkdown" class="material-text compact"></pre>
+              </details>
+            </div>
+            <div class="debug-card wide">
+              <h3>Raw Response</h3>
+              <pre id="rawResponseBox" class="material-text compact"></pre>
+            </div>
+          </div>
+        </details>
+      </section>
+    </main>
+
+    <div id="pageTextOverlay" class="settings-overlay" hidden></div>
+    <aside id="pageTextDrawer" class="page-text-drawer" data-testid="page-text-drawer" hidden>
+      <header class="drawer-head">
+        <div>
+          <p class="panel-kicker">Current Page</p>
+          <h2>当前页解析文本</h2>
+        </div>
+        <button id="closePageTextDrawer" class="ghost-button" type="button">关闭</button>
+      </header>
+      <section class="drawer-scroll">
+        <h3>纯文本</h3>
+        <pre id="pageText" class="material-text drawer-text"></pre>
+        <h3>Markdown</h3>
+        <pre id="pageMarkdownDrawer" class="material-text drawer-text"></pre>
+      </section>
+    </aside>
+
+    <dialog id="slideModal" class="slide-modal">
+      <button id="closeSlideModal" type="button">关闭</button>
+      <img id="slideModalImage" alt="放大的 PPT 页" />
+    </dialog>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
