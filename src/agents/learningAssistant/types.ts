@@ -1,3 +1,9 @@
+/**
+ * Shared type surface for the education agent.
+ *
+ * The serving additions are append-only so existing UI/tests keep working;
+ * new fields distinguish actual, estimated, simulated, and unavailable metrics.
+ */
 export type ChatRole = "user" | "assistant" | "system";
 
 export type ChatMessage = {
@@ -504,6 +510,19 @@ export type GenerationDebugInfo = {
   rejectedEvidenceCount: number;
   groundingPassed: boolean;
   groundingFailureReason?: string;
+  servingTraceSummary?: {
+    estimatedPrefillTokens: number;
+    estimatedDecodeTokens: number;
+    simulatedTTFTMs?: number;
+    simulatedTPOTMs?: number;
+    contextBudgetPolicy?: string;
+    cacheAwarePrompt?: {
+      mode: string;
+      applied: boolean;
+      stablePrefixTokens: number;
+      stablePrefixHash: string;
+    };
+  };
 };
 
 export type AssistantAgentResponse = {
@@ -529,6 +548,7 @@ export type AssistantAgentResponse = {
   };
   retrievalDebug?: RetrievalResult;
   followUps?: string[];
+  servingTrace?: import("./serving/ServingTrace.ts").ServingPhaseTrace;
 };
 
 export type LLMClient = {

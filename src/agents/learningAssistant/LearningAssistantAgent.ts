@@ -1,3 +1,11 @@
+/**
+ * Main education-agent pipeline.
+ *
+ * This file intentionally keeps the original answering behavior while adding
+ * serving observability around it: phase timings, token estimates, PD what-if
+ * metrics, and cache-aware prompt observations. Trace data must stay safe: no
+ * raw prompt, raw answer, or API key should be persisted.
+ */
 import { QuestionAnalyzer, lexicalOverlap } from "./analysis/QuestionAnalyzer.ts";
 import { ContextAnalyzer } from "./context/ContextAnalyzer.ts";
 import { AnswerabilityChecker } from "./grounding/AnswerabilityChecker.ts";
@@ -6,6 +14,21 @@ import { StudentModeler } from "./learner/StudentModeler.ts";
 import { TeachingPolicyPlanner } from "./learner/TeachingPolicyPlanner.ts";
 import { assistantSystemPrompt } from "./prompts/assistantSystemPrompt.ts";
 import { buildAnswerPrompt } from "./prompts/answerPrompt.ts";
+import {
+  ContextBudgetPlanner,
+  CacheAwarePromptBuilder,
+  PhaseTimer,
+  PDServingSimulator,
+  TokenEstimator,
+  createQueryHash,
+  createRequestId,
+  type PromptTokenBreakdown,
+  type CacheAwarePromptPlan,
+  type PromptCanonicalizationMode,
+  type ServingOptimizationMode,
+  type ServingPhaseTrace,
+  type ServingSLO
+} from "./serving/index.ts";
 import { KnowledgeRetrievalSkill } from "./skills/KnowledgeRetrievalSkill.ts";
 import { SkillRegistry } from "./skills/SkillRegistry.ts";
 import type {
@@ -44,6 +67,9 @@ export type LearningAssistantAgentOptions = {
   llm?: LLMClient;
   groundingMode?: GroundingMode;
   requireRealLlm?: boolean;
+  servingOptimizationMode?: ServingOptimizationMode;
+  servingSLO?: ServingSLO;
+  promptCanonicalizationMode?: PromptCanonicalizationMode;
 };
 
 export class LearningAssistantAgent {
@@ -51,6 +77,9 @@ export class LearningAssistantAgent {
   private llm?: LLMClient;
   private groundingMode: GroundingMode;
   private requireRealLlm: boolean;
+  private servingOptimizationMode: ServingOptimizationMode;
+  private servingSLO?: ServingSLO;
+  private promptCanonicalizationMode?: PromptCanonicalizationMode;
   private registry: SkillRegistry;
   private contextAnalyzer = new ContextAnalyzer();
   private questionAnalyzer = new QuestionAnalyzer();
@@ -58,12 +87,19 @@ export class LearningAssistantAgent {
   private policyPlanner = new TeachingPolicyPlanner();
   private evidenceSelector = new EvidenceSelector();
   private answerabilityChecker = new AnswerabilityChecker();
+  private tokenEstimator = new TokenEstimator();
+  private contextBudgetPlanner = new ContextBudgetPlanner();
+  private cacheAwarePromptBuilder = new CacheAwarePromptBuilder();
+  private pdSimulator = new PDServingSimulator();
 
   constructor(options: LearningAssistantAgentOptions = {}) {
     this.kb = options.kb;
     this.llm = options.llm;
     this.groundingMode = options.groundingMode ?? "allow_general_knowledge_with_label";
     this.requireRealLlm = options.requireRealLlm ?? false;
+    this.servingOptimizationMode = options.servingOptimizationMode ?? normalizeServingMode(process.env.SERVING_OPTIMIZATION_MODE);
+    this.servingSLO = options.servingSLO;
+    this.promptCanonicalizationMode = options.promptCanonicalizationMode;
     this.registry = options.skillRegistry ?? new SkillRegistry(options.skills ?? []);
     if (!this.registry.get("KnowledgeRetrievalSkill")) {
       this.registry.register(new KnowledgeRetrievalSkill());
@@ -71,11 +107,27 @@ export class LearningAssistantAgent {
   }
 
   async answer(query: string, context: LearningContext = {}): Promise<AssistantAgentResponse> {
+    const timer = new PhaseTimer();
+    const requestId = createRequestId();
+    timer.mark("total:start");
+
+    timer.mark("contextAnalysis:start");
     const summary = this.contextAnalyzer.analyze(query, context);
+    timer.mark("contextAnalysis:end");
+    timer.measure("contextAnalysis", "contextAnalysis:start", "contextAnalysis:end");
+
+    timer.mark("questionAnalysis:start");
     const question = this.questionAnalyzer.analyze(query, context);
+    timer.mark("questionAnalysis:end");
+    timer.measure("questionAnalysis", "questionAnalysis:start", "questionAnalysis:end");
+
+    timer.mark("policyPlanning:start");
     const student = this.studentModeler.infer(query, context, summary);
     const basePolicy = this.policyPlanner.plan(query, summary, student);
     const policy = refinePolicy(basePolicy, question, context);
+    timer.mark("policyPlanning:end");
+    timer.measure("policyPlanning", "policyPlanning:start", "policyPlanning:end");
+
     const conceptResolution = resolveConceptReference(query, context, question);
     const retrievalQuery = conceptResolution?.retrievalQuery ?? query;
     const evidenceQuery = conceptResolution?.assumedConcept ?? query;
@@ -83,6 +135,7 @@ export class LearningAssistantAgent {
     let retrievedChunks: RetrievedChunk[] = [];
     let retrievalResult: RetrievalResult | undefined;
 
+    timer.mark("retrieval:start");
     if (policy.shouldCallSkill) {
       if (!this.kb) {
         usedSkills.push({
@@ -137,9 +190,35 @@ export class LearningAssistantAgent {
         reason: "question can be evaluated against current context without retrieval"
       });
     }
+    timer.mark("retrieval:end");
+    timer.measure("retrieval", "retrieval:start", "retrieval:end");
 
-    const selectedEvidence = this.evidenceSelector.select(evidenceQuery, context, retrievedChunks, question);
+    timer.mark("evidenceSelection:start");
+    let selectedEvidence = this.evidenceSelector.select(evidenceQuery, context, retrievedChunks, question);
+    const preliminaryTokenEstimate = this.tokenEstimator.estimatePromptBreakdown({
+      systemPrompt: assistantSystemPrompt,
+      userPrompt: query,
+      selectedEvidence: selectedEvidence.selected,
+      context
+    });
+    const budgetPlan = this.contextBudgetPlanner.plan({
+      query,
+      questionAnalysis: question,
+      selectedEvidence,
+      tokenEstimate: preliminaryTokenEstimate,
+      confidence: selectedEvidence.sufficiency === "sufficient" ? "high" : selectedEvidence.sufficiency === "partially_sufficient" ? "medium" : "low",
+      groundingMode: this.groundingMode,
+      slo: this.servingSLO,
+      materialId: context.material?.id,
+      pageIndex: context.currentPage?.pageIndex,
+      mode: this.servingOptimizationMode
+    });
+    selectedEvidence = budgetPlan.selectedEvidence;
+    timer.mark("evidenceSelection:end");
+    timer.measure("evidenceSelection", "evidenceSelection:start", "evidenceSelection:end");
+
     const relevance = buildRelevance(query, context, selectedEvidence, retrievalResult, question);
+    timer.mark("answerability:start");
     const answerability = this.answerabilityChecker.check({
       question,
       evidence: selectedEvidence,
@@ -147,6 +226,10 @@ export class LearningAssistantAgent {
       relevance
     });
     const groundingCheck = checkGrounding(answerability, selectedEvidence);
+    timer.mark("answerability:end");
+    timer.measure("answerability", "answerability:start", "answerability:end");
+
+    const confidence = computeConfidence(answerability, selectedEvidence, retrievalResult);
     const generated = await this.generateAnswer({
       query,
       question,
@@ -157,10 +240,10 @@ export class LearningAssistantAgent {
       answerability,
       groundingCheck,
       usedSkills,
-      conceptResolution
+      conceptResolution,
+      timer
     });
     const citations = buildCitations(selectedEvidence.selected);
-    const confidence = computeConfidence(answerability, selectedEvidence, retrievalResult);
     const decisionTrace = buildDecisionTrace({
       query,
       question,
@@ -172,6 +255,41 @@ export class LearningAssistantAgent {
       usedSkills,
       retrievalResult
     });
+    timer.mark("total:end");
+    timer.measure("total", "total:start", "total:end");
+
+    const tokenEstimate = finalizeTokenEstimate(generated.promptTokenBreakdown, generated.answer, this.tokenEstimator);
+    const simulatedPD = this.pdSimulator.simulatePDForTrace({ tokenEstimate });
+    const latency = timer.toJSON();
+    const servingTrace: ServingPhaseTrace = {
+      requestId,
+      createdAt: new Date().toISOString(),
+      queryHash: createQueryHash(query),
+      materialId: context.material?.id,
+      pageIndex: context.currentPage?.pageIndex,
+      answerGenerationMode: generated.debug.answerGenerationMode,
+      providerName: generated.debug.providerName,
+      modelName: generated.debug.modelName,
+      tokenEstimate,
+      latencyMs: {
+        contextAnalysis: latency.contextAnalysis,
+        questionAnalysis: latency.questionAnalysis,
+        policyPlanning: latency.policyPlanning,
+        retrieval: latency.retrieval,
+        evidenceSelection: latency.evidenceSelection,
+        answerability: latency.answerability,
+        promptBuild: latency.promptBuild,
+        llmWallClock: generated.llmWallClockMs,
+        total: latency.total
+      },
+      simulatedPD,
+      cacheAwarePrompt: generated.cacheAwarePrompt,
+      contextBudgetSuggestion: budgetPlan.suggestion,
+      retrievalStatus: retrievalResult?.status ?? (policy.shouldCallSkill ? (this.kb ? "empty" : "failed") : "skipped"),
+      selectedEvidenceCount: selectedEvidence.selected.length,
+      rejectedEvidenceCount: selectedEvidence.rejected.length,
+      confidence: confidenceToNumber(confidence)
+    };
 
     return {
       answer: generated.answer,
@@ -193,7 +311,22 @@ export class LearningAssistantAgent {
         selectedEvidenceCount: selectedEvidence.selected.length,
         rejectedEvidenceCount: selectedEvidence.rejected.length,
         groundingPassed: groundingCheck.passed,
-        groundingFailureReason: generated.debug.groundingFailureReason ?? (groundingCheck.passed ? undefined : groundingCheck.reason)
+        groundingFailureReason: generated.debug.groundingFailureReason ?? (groundingCheck.passed ? undefined : groundingCheck.reason),
+        servingTraceSummary: {
+          estimatedPrefillTokens: tokenEstimate.estimatedPrefillTokens,
+          estimatedDecodeTokens: tokenEstimate.estimatedDecodeTokens,
+          simulatedTTFTMs: servingTrace.simulatedPD?.estimatedTTFTMs,
+          simulatedTPOTMs: servingTrace.simulatedPD?.estimatedTPOTMs,
+          contextBudgetPolicy: servingTrace.contextBudgetSuggestion?.recommendedPolicy,
+          cacheAwarePrompt: servingTrace.cacheAwarePrompt
+            ? {
+                mode: servingTrace.cacheAwarePrompt.mode,
+                applied: servingTrace.cacheAwarePrompt.applied,
+                stablePrefixTokens: servingTrace.cacheAwarePrompt.stablePrefixTokens,
+                stablePrefixHash: servingTrace.cacheAwarePrompt.stablePrefixHash
+              }
+            : undefined
+        }
       },
       answerGenerationMode: generated.debug.answerGenerationMode,
       evidenceDebug: {
@@ -201,10 +334,10 @@ export class LearningAssistantAgent {
         rejected: selectedEvidence.rejected
       },
       retrievalDebug: retrievalResult,
-      followUps: buildFollowUps(answerability, question, confidence)
+      followUps: buildFollowUps(answerability, question, confidence),
+      servingTrace
     };
   }
-
   private async generateAnswer(input: {
     query: string;
     question: QuestionAnalysis;
@@ -216,7 +349,9 @@ export class LearningAssistantAgent {
     groundingCheck: GroundingCheck;
     usedSkills: UsedSkillRecord[];
     conceptResolution?: ConceptResolution;
-  }): Promise<{ answer: string; debug: GenerationDebugInfo }> {
+    timer?: PhaseTimer;
+  }): Promise<{ answer: string; debug: GenerationDebugInfo; promptTokenBreakdown: PromptTokenBreakdown; cacheAwarePrompt: CacheAwarePromptPlan; llmWallClockMs?: number }> {
+    input.timer?.mark("promptBuild:start");
     const prompt = buildAnswerPrompt({
       query: input.query,
       questionAnalysis: input.question,
@@ -231,6 +366,22 @@ export class LearningAssistantAgent {
       groundingMode: this.groundingMode,
       actualSkillsSummary: summarizeUsedSkills(input.usedSkills),
       conceptResolutionSummary: input.conceptResolution?.note
+    });
+    input.timer?.mark("promptBuild:end");
+    input.timer?.measure("promptBuild", "promptBuild:start", "promptBuild:end");
+    const cacheAwarePrompt = this.cacheAwarePromptBuilder.plan({
+      originalPrompt: prompt,
+      query: input.query,
+      context: input.context,
+      selectedEvidence: input.selectedEvidence.selected,
+      mode: this.promptCanonicalizationMode
+    });
+    const effectivePrompt = cacheAwarePrompt.applied ? cacheAwarePrompt.canonicalPrompt : prompt;
+    const promptTokenBreakdown = this.tokenEstimator.estimatePromptBreakdown({
+      systemPrompt: assistantSystemPrompt,
+      userPrompt: effectivePrompt,
+      selectedEvidence: input.selectedEvidence.selected,
+      context: input.context
     });
     const providerName = this.llm?.providerName;
     const modelName = this.llm?.modelName;
@@ -252,7 +403,9 @@ export class LearningAssistantAgent {
     if (input.answerability.shouldRefuseToInvent) {
       return {
         answer: buildRefusalAnswer(input.query, input.context, input.answerability),
-        debug: { ...baseDebug, answerGenerationMode: "template_fallback", usedTemplateFallback: true }
+        debug: { ...baseDebug, answerGenerationMode: "template_fallback", usedTemplateFallback: true },
+        promptTokenBreakdown,
+        cacheAwarePrompt
       };
     }
 
@@ -263,19 +416,25 @@ export class LearningAssistantAgent {
     if (input.question.intent === "ask_knowledge_base" && input.conceptResolution && retrievalWasEmpty && kbEvidence.length === 0) {
       return {
         answer: buildConceptRetrievalEmptyAnswer(input.conceptResolution, input.context),
-        debug: { ...baseDebug, answerGenerationMode: "template_fallback", usedTemplateFallback: true }
+        debug: { ...baseDebug, answerGenerationMode: "template_fallback", usedTemplateFallback: true },
+        promptTokenBreakdown,
+        cacheAwarePrompt
       };
     }
 
+    let llmWallClockMs: number | undefined;
     if (this.llm) {
       try {
+        input.timer?.mark("llm:start");
         const generated = await this.llm.generate(
           [
             { role: "system", content: assistantSystemPrompt },
-            { role: "user", content: prompt }
+            { role: "user", content: effectivePrompt }
           ],
           { policy: input.policy, groundingMode: this.groundingMode }
         );
+        input.timer?.mark("llm:end");
+        llmWallClockMs = input.timer?.measure("llmWallClock", "llm:start", "llm:end");
         if (generated.trim()) {
           const shapedAnswer = enforceAnswerShape(generated.trim(), input.query, input.question, input.selectedEvidence);
           return {
@@ -284,10 +443,15 @@ export class LearningAssistantAgent {
               ...baseDebug,
               answerGenerationMode: this.llm.isMock ? "mock_llm" : "real_llm",
               rawLlmCalled: true
-            }
+            },
+            promptTokenBreakdown,
+            cacheAwarePrompt,
+            llmWallClockMs
           };
         }
       } catch (error) {
+        input.timer?.mark("llm:end");
+        llmWallClockMs = input.timer?.measure("llmWallClock", "llm:start", "llm:end");
         const failureReason = error instanceof Error ? error.message : "LLM call failed";
         if (this.requireRealLlm) {
           return {
@@ -297,7 +461,10 @@ export class LearningAssistantAgent {
               rawLlmCalled: true,
               llmFailureReason: failureReason,
               groundingFailureReason: failureReason
-            }
+            },
+            promptTokenBreakdown,
+            cacheAwarePrompt,
+            llmWallClockMs
           };
         }
         baseDebug.rawLlmCalled = true;
@@ -307,16 +474,42 @@ export class LearningAssistantAgent {
 
     if (this.requireRealLlm) {
       return {
-        answer: "LLM provider unavailable. 当前 demo 要求真实模型，但没有可用的 LLM 配置。",
-        debug: baseDebug
+        answer: "LLM provider unavailable. Real LLM is required but no provider is configured.",
+        debug: baseDebug,
+        promptTokenBreakdown,
+        cacheAwarePrompt,
+        llmWallClockMs
       };
     }
 
     return {
       answer: buildTemplateAnswer(input.query, input.context, input.question, input.policy, input.selectedEvidence, input.answerability, input.conceptResolution),
-      debug: { ...baseDebug, answerGenerationMode: "template_fallback", usedTemplateFallback: true }
+      debug: { ...baseDebug, answerGenerationMode: "template_fallback", usedTemplateFallback: true },
+      promptTokenBreakdown,
+      cacheAwarePrompt,
+      llmWallClockMs
     };
   }
+}
+
+function finalizeTokenEstimate(breakdown: PromptTokenBreakdown, answer: string, estimator: TokenEstimator): PromptTokenBreakdown {
+  const estimatedDecodeTokens = estimator.estimateTokens(answer);
+  return {
+    ...breakdown,
+    estimatedDecodeTokens,
+    nonCacheableTokens: Math.max(0, breakdown.estimatedPrefillTokens - breakdown.cacheablePrefixTokens)
+  };
+}
+
+function confidenceToNumber(confidence: "low" | "medium" | "high"): number {
+  if (confidence === "high") return 0.9;
+  if (confidence === "medium") return 0.6;
+  return 0.3;
+}
+
+function normalizeServingMode(value: string | undefined): ServingOptimizationMode {
+  if (value === "off" || value === "observe_only" || value === "adaptive") return value;
+  return "observe_only";
 }
 
 function enforceAnswerShape(answer: string, query: string, question: QuestionAnalysis, evidence: SelectedEvidence): string {

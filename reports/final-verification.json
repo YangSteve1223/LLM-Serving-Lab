@@ -1,0 +1,74 @@
+{
+  "generatedAt": "2026-05-20T06:51:51.861Z",
+  "passed": true,
+  "checks": [
+    {
+      "name": "npm run test:serving",
+      "passed": true,
+      "details": "passed"
+    },
+    {
+      "name": "npm test",
+      "passed": true,
+      "details": "passed"
+    },
+    {
+      "name": "npm run simulate:pd",
+      "passed": true,
+      "details": "passed"
+    },
+    {
+      "name": "npm run benchmark:engine",
+      "passed": true,
+      "details": "passed"
+    },
+    {
+      "name": "npm run generate:code-context",
+      "passed": true,
+      "details": "passed"
+    },
+    {
+      "name": "required file exists: docs/LEARN_AGENT_项目完整说明书.docx",
+      "passed": true
+    },
+    {
+      "name": "required file exists: docs/LEARN_AGENT_项目完整说明书.md",
+      "passed": true
+    },
+    {
+      "name": "required file exists: reports/LEARN_AGENT_CODE_CONTEXT_FOR_AI.txt",
+      "passed": true
+    },
+    {
+      "name": "required file exists: docs/final-research-report.md",
+      "passed": true
+    },
+    {
+      "name": "required file exists: docs/learning-guide.md",
+      "passed": true
+    },
+    {
+      "name": "required file exists: reports/engine-benchmark.md",
+      "passed": true
+    },
+    {
+      "name": "required file exists: reports/pd-simulation.md",
+      "passed": true
+    },
+    {
+      "name": "secret/raw prompt scan",
+      "passed": true,
+      "details": "no matches"
+    },
+    {
+      "name": "dry-run benchmark truthfulness",
+      "passed": true,
+      "details": "dry-run must expose workload success but not actual SLO goodput"
+    },
+    {
+      "name": "PD simulation truthfulness",
+      "passed": true,
+      "details": "PD simulation must be labeled estimated/simulated"
+    }
+  ]
+}

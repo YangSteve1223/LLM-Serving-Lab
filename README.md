@@ -1,5 +1,132 @@
 # Learning Assistant Agent
 
+## Project Status: Research Artifact Ready
+
+LEARN_AGENT is ready to freeze as a pre-master research-oriented engineering artifact. It combines an education agent workload with a cache-aware and PD-aware LLM serving lab: application traces, prompt component hashing, context policy replay, dry-run benchmark reports, simulated Prefill-Decode what-if analysis, and an optional vLLM/SGLang/OpenAI-compatible engine bridge.
+
+No GPU is required for the default tests and dry-run benchmark. Real TTFT/ITL/E2E require a streaming endpoint. Real vLLM/SGLang cache metrics require a running engine with `/metrics`. PD disaggregation results are simulated unless a real disaggregated engine is configured.
+
+## What This Project Is
+
+- An embeddable learning assistant that answers questions with current slide, teacher script, outline, learner profile, chat history, and evidence context.
+- An application-level workload harness for studying long, structured educational-agent prompts.
+- A research lab for observing prompt cost, cacheable prefix structure, context budget choices, and estimated prefill/decode behavior.
+- A bridge that can replay the same workload against vLLM, SGLang, or a generic OpenAI-compatible streaming endpoint when hardware is available.
+
+## What This Project Is Not
+
+- It is not a production LLM serving engine.
+- It is not a CUDA, KV-cache, or scheduler implementation.
+- It does not claim real GPU PD-disaggregation results in the default environment.
+- It does not treat dry-run latency or dry-run goodput as real SLO measurements.
+
+## Why Education Agent Workloads Matter
+
+Education agents naturally carry repeated, structured context: course policy, material outline, current slide, teacher script, selected evidence, learner state, chat history, and the current question. That shape makes them useful for studying prefix caching, cache-friendly prompt layout, context budget planning, and prefill/decode tradeoffs.
+
+## Core Features
+
+- PPT/PPTX/Markdown/text material loading with current-page awareness and slide previews.
+- Evidence-gated answer generation with citations, confidence, answerability checks, and refusal when evidence is insufficient.
+- Learning-loop modules for quiz generation, grading, learning memory, review tasks, resources, and teacher insight.
+- Serving observability for token estimates, phase latency, selected evidence cost, and safe request traces.
+- PD simulator for `monolithic_shared`, `pd_disaggregated`, and `hybrid` what-if comparisons.
+- Optional engine bridge for streaming latency and Prometheus metric collection from vLLM/SGLang-compatible services.
+
+## Quick Start
+
+```powershell
+cd "<project-directory>"
+npm install
+npm run test:serving
+npm test
+npm run simulate:pd
+npm run benchmark:engine
+npm run verify:final
+```
+
+UI:
+
+```powershell
+npm run ui
+```
+
+Open:
+
+```text
+http://127.0.0.1:4173/?mode=demo
+http://127.0.0.1:4173/?mode=developer
+http://127.0.0.1:4173/competition
+```
+
+## Research Modules
+
+- PD-aware serving lab: safe traces, heuristic token accounting, context budget suggestions, and simulated PD reports. See [`docs/pd-serving-lab.md`](docs/pd-serving-lab.md).
+- SOTA engine bridge: optional streaming benchmark and vLLM/SGLang metrics adapter. See [`docs/sota-engine-bridge.md`](docs/sota-engine-bridge.md).
+- Cache-aware prompt canonicalization: stable prompt component ordering, hashing, stable-prefix estimates, and cache-first dry-run analysis.
+
+## Reproducibility
+
+Default reproducibility does not depend on GPU hardware:
+
+- `npm run test:serving` checks serving modules, reports, docs, and benchmark semantics.
+- `npm test` checks the original learning assistant behavior.
+- `npm run simulate:pd` writes simulated reports to `reports/pd-simulation.*`.
+- `npm run benchmark:engine` runs dry-run workload generation and prompt accounting without an endpoint.
+- `npm run verify:final` runs the final artifact verification and writes `reports/final-verification.*`.
+
+## Reports And Docs
+
+- [`docs/final-research-report.md`](docs/final-research-report.md): polished research-style project report.
+- [`docs/learning-guide.md`](docs/learning-guide.md): 7-day reading plan and explanation script for the project owner.
+- [`docs/LEARN_AGENT_项目完整说明书.docx`](docs/LEARN_AGENT_项目完整说明书.docx): Chinese Word manual for reading the whole project.
+- [`docs/LEARN_AGENT_项目完整说明书.md`](docs/LEARN_AGENT_项目完整说明书.md): editable Markdown source for the Word manual.
+- [`docs/pd-serving-lab.md`](docs/pd-serving-lab.md): simulator and trace metric definitions.
+- [`docs/sota-engine-bridge.md`](docs/sota-engine-bridge.md): optional real-engine benchmark guide.
+- [`reports/LEARN_AGENT_CODE_CONTEXT_FOR_AI.txt`](reports/LEARN_AGENT_CODE_CONTEXT_FOR_AI.txt): source context bundle for another AI model.
+- [`reports/final-verification.md`](reports/final-verification.md): generated final verification result.
+- [`reports/engine-benchmark.md`](reports/engine-benchmark.md): dry-run or real engine benchmark report.
+- [`reports/pd-simulation.md`](reports/pd-simulation.md): simulated PD what-if report.
+
+## Limitations
+
+- Token estimates are deterministic heuristics, not exact tokenizer counts.
+- Dry-run benchmark validates workload shape and prompt accounting only.
+- Dry-run workload success is not actual SLO goodput.
+- Real TTFT/ITL/E2E require an endpoint that supports streaming.
+- vLLM/SGLang cache metrics require Prometheus `/metrics`.
+- PD simulation is a simplified what-if model, not a real GPU scheduling measurement.
+- Human answer quality is not measured by the serving benchmark.
+
+## Next Learning Path
+
+Read [`docs/learning-guide.md`](docs/learning-guide.md), then trace one `/api/ask` call from `examples/learning-assistant-ui/server.ts` into `src/agents/learningAssistant/LearningAssistantAgent.ts` and the `src/agents/learningAssistant/serving/` modules. After that, use [`docs/final-research-report.md`](docs/final-research-report.md) as the 5-minute explanation script for interviews or professor conversations.
+
+## Legacy Implementation Notes
+## PD-Aware Serving Lab
+
+This repository includes a lightweight research extension for Prefill-Decode aware LLM serving. It does not change the education agent's main behavior by default.
+
+- `/api/ask` returns a `servingTrace` with phase latency, prompt token estimates, cacheable prefix estimates, and simulated PD metrics.
+- Traces are stored without raw prompts, raw answers, or API keys.
+- `GET /api/serving/traces?limit=50` lists recent safe traces.
+- `POST /api/serving/simulate` compares `monolithic_shared`, `pd_disaggregated`, and `hybrid` simulator policies.
+- `npm run simulate:pd` generates `reports/pd-simulation.json` and `reports/pd-simulation.md`.
+- `SERVING_OPTIMIZATION_MODE=observe_only` is the default; `adaptive` must be explicitly enabled.
+
+See `docs/pd-serving-lab.md` for the metric definitions and limitations. Simulated TTFT/TPOT values are heuristic estimates, not real remote API streaming metrics or GPU measurements.
+
+## SOTA Engine Bridge
+
+The project now also includes an optional benchmark bridge for vLLM, SGLang, and generic OpenAI-compatible endpoints.
+
+- `npm run benchmark:engine` runs an offline dry-run with no GPU or endpoint.
+- `BASE_URL=http://127.0.0.1:8000/v1 MODEL=<model> npm run benchmark:vllm` benchmarks a local vLLM-compatible endpoint.
+- `BASE_URL=http://127.0.0.1:8000/v1 MODEL=<model> npm run benchmark:sglang` benchmarks a local SGLang-compatible endpoint.
+- `/api/serving/engine-metrics`, `/api/serving/engine-probe`, and `/api/serving/replay` expose the same capabilities through the UI server API.
+
+The bridge records real TTFT/ITL/E2E only when the endpoint supports streaming. Metrics from vLLM/SGLang are optional Prometheus scrapes. Reports never store raw prompts, raw answers, or API keys. See `docs/sota-engine-bridge.md` for setup and limitations.
+
 这是一个可嵌入学习平台的右侧 AI 助教模块。它不是独立聊天机器人，而是接收平台或本地测试台传入的学习上下文，再基于当前页、讲稿、大纲、学习者画像和本地知识库证据回答学生问题。
 
 ## 当前诊断结论

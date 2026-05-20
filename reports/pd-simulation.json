@@ -1,0 +1,103 @@
+{
+  "generatedAt": "2026-05-20T06:51:50.807Z",
+  "source": "synthetic",
+  "requestCount": 200,
+  "qps": 4,
+  "config": {
+    "slo": {
+      "ttftMs": 800,
+      "tpotMs": 80,
+      "e2eMs": 8000
+    },
+    "prefillWorkers": 1,
+    "decodeWorkers": 1,
+    "monolithicWorkers": 1
+  },
+  "results": [
+    {
+      "policyName": "monolithic_shared",
+      "requestCount": 200,
+      "goodput": 0.005,
+      "latency": {
+        "ttftP50": 351155.072,
+        "ttftP90": 637708.499,
+        "ttftP99": 703131.853,
+        "tpotP50": 21.654,
+        "tpotP90": 22.064,
+        "tpotP99": 22.306,
+        "e2eP50": 358404.614,
+        "e2eP90": 644958.041,
+        "e2eP99": 705586.253
+      },
+      "utilization": {
+        "prefillUtilization": 0,
+        "decodeUtilization": 0,
+        "monolithicUtilization": 1.069
+      },
+      "queueing": {
+        "prefillQueueP90": 637273.315,
+        "decodeQueueP90": 0
+      },
+      "notes": [
+        "Simplified shared-pool baseline: prefill and decode contend on the same workers with an interference penalty."
+      ]
+    },
+    {
+      "policyName": "pd_disaggregated",
+      "requestCount": 200,
+      "goodput": 0.015,
+      "latency": {
+        "ttftP50": 1475.25,
+        "ttftP90": 2409.6,
+        "ttftP99": 2644.95,
+        "tpotP50": 18.351,
+        "tpotP90": 18.698,
+        "tpotP99": 18.904,
+        "e2eP50": 273975.55,
+        "e2eP90": 492830.59,
+        "e2eP99": 538964.59
+      },
+      "utilization": {
+        "prefillUtilization": 0.096,
+        "decodeUtilization": 1.091
+      },
+      "queueing": {
+        "prefillQueueP90": 2130.3,
+        "decodeQueueP90": 484169.46
+      },
+      "notes": [
+        "Simplified trace-driven PD simulator: prefill queue, KV transfer, then decode queue.",
+        "TTFT includes estimated prefill plus KV transfer overhead."
+      ]
+    },
+    {
+      "policyName": "hybrid",
+      "requestCount": 200,
+      "goodput": 0.01,
+      "latency": {
+        "ttftP50": 250.269,
+        "ttftP90": 373.116,
+        "ttftP99": 403.608,
+        "tpotP50": 18.351,
+        "tpotP90": 18.698,
+        "tpotP99": 18.904,
+        "e2eP50": 385058.121,
+        "e2eP90": 552749.721,
+        "e2eP99": 553309.721
+      },
+      "utilization": {
+        "prefillUtilization": 0.08,
+        "decodeUtilization": 1.079
+      },
+      "queueing": {
+        "prefillQueueP90": 91.566,
+        "decodeQueueP90": 551270.492
+      },
+      "notes": [
+        "Simplified hybrid policy: cache-aware prefill and SLO-aware decode prioritization are approximated deterministically.",
+        "This is not a reproduction of any specific paper; it is for workload-level what-if analysis."
+      ]
+    }
+  ],
+  "sweepRows": []
+}

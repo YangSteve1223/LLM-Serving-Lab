@@ -1,3 +1,10 @@
+/**
+ * Local demo/API server for the learning assistant.
+ *
+ * Besides /api/ask, this server exposes serving trace, simulation, and optional
+ * engine bridge endpoints. API keys are used only in request scope and must not
+ * be written to traces, reports, or logs.
+ */
 import { createServer } from "node:http";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -11,22 +18,33 @@ import {
   LearningLoopAgent,
   MarkdownKnowledgeBase,
   OpenAICompatibleLLMClient,
+  EngineBenchmarkRunner,
+  EngineMetricsClient,
+  PDServingSimulator,
   PowerPointComSlideRenderer,
+  RequestTraceStore,
   ResourceLibraryStore,
   ResourceScoutAgent,
+  StreamingOpenAICompatibleClient,
   TeacherInsightAgent,
   applySlidePreviewManifest,
   createLLMClientFromEnv,
   createMaterialProvider,
+  diffEngineMetrics,
   materialToMarkdown,
   pageToMarkdown,
+  renderEngineBenchmarkReport,
+  renderPDReport,
   type AnswerStylePreference,
+  type EngineBenchmarkPolicy,
+  type EngineKind,
   type GroundingMode,
   type LearningContext,
   type LLMClient,
   type LearningMaterial,
   type LearningPage,
   type MicroQuiz,
+  type PDSimulationConfig,
   type SlidePreview,
   type SlidePreviewManifest
 } from "../../src/agents/learningAssistant/index.ts";
@@ -60,6 +78,14 @@ const resourceScoutAgent = new ResourceScoutAgent({ resourceStore, env: process.
 const teacherInsightAgent = new TeacherInsightAgent();
 const futureSchoolAgent = new FutureSchoolAgent();
 const quizzes = new Map<string, MicroQuiz>();
+const servingTraceStore = new RequestTraceStore({
+  limit: 200,
+  tracePath: process.env.SERVING_TRACE_PATH ?? path.join(rootDir, "reports", "serving-traces.jsonl"),
+  enabledJsonl: true
+});
+const pdServingSimulator = new PDServingSimulator();
+const engineMetricsClient = new EngineMetricsClient();
+const engineBenchmarkRunner = new EngineBenchmarkRunner();
 
 const exampleQuestions = [
   "这页主要讲什么？",
@@ -135,10 +161,129 @@ const server = createServer(async (request, response) => {
         kb,
         llm: requestLlm,
         requireRealLlm,
-        groundingMode
+        groundingMode,
+        servingOptimizationMode: normalizeServingOptimizationMode(body.servingOptimizationMode),
+        servingSLO: normalizeServingSLO(body.slo)
       });
       const result = await agent.answer(query, context);
+      if (result.servingTrace) {
+        await servingTraceStore.add(result.servingTrace);
+      }
       return sendJson(response, result);
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/serving/traces") {
+      const limit = Number(url.searchParams.get("limit") ?? 50);
+      return sendJson(response, {
+        traces: servingTraceStore.list({ limit: Number.isFinite(limit) ? limit : 50 }),
+        note: "Traces contain hashes, token estimates, latency, and aggregate evidence metadata only; raw prompts, raw answers, and API keys are not stored."
+      });
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/serving/traces/clear") {
+      servingTraceStore.clear();
+      return sendJson(response, { ok: true });
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/serving/simulate") {
+      const body = await readJson(request);
+      const source = body.source === "recent_traces" ? "recent_traces" : "synthetic";
+      const requestCount = clampInteger(body.requestCount, 100, 1, 2000);
+      const qps = clampNumber(body.qps, 2, 0.1, 200);
+      const config = simulationConfigFromBody(body);
+      const traces = servingTraceStore.list({ limit: requestCount }).reverse();
+      const workload =
+        source === "recent_traces" && traces.length > 0
+          ? pdServingSimulator.tracesToWorkload(traces, qps)
+          : pdServingSimulator.buildSyntheticWorkload(requestCount, qps);
+      const results = pdServingSimulator.comparePolicies(workload, config);
+      return sendJson(response, {
+        source,
+        requestCount: workload.length,
+        results,
+        markdown: renderPDReport(results)
+      });
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/serving/engine-metrics") {
+      const metricsUrl = requireString(url.searchParams.get("metricsUrl"), "metricsUrl");
+      const engine = normalizeEngine(url.searchParams.get("engine"));
+      const safeUrl = validateMetricsUrl(metricsUrl);
+      const metrics = await engineMetricsClient.scrape({ metricsUrl: safeUrl, engine });
+      return sendJson(response, { metrics });
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/serving/engine-probe") {
+      const body = await readJson(request);
+      const baseUrl = requireString(body.baseUrl, "baseUrl");
+      validateHttpEndpoint(baseUrl);
+      const metricsUrl = typeof body.metricsUrl === "string" && body.metricsUrl.trim() ? validateMetricsUrl(body.metricsUrl.trim()) : undefined;
+      const engine = normalizeEngine(body.engine);
+      const model = requireString(body.model, "model");
+      const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : undefined;
+      const prompt = typeof body.prompt === "string" && body.prompt.trim() ? body.prompt.trim() : "hello";
+      const before = metricsUrl ? await engineMetricsClient.scrape({ metricsUrl, engine }) : undefined;
+      const client = new StreamingOpenAICompatibleClient({
+        baseUrl,
+        apiKey,
+        model,
+        timeoutMs: 60000,
+        maxTokens: 64,
+        temperature: 0
+      });
+      const result = await client.chat(
+        [
+          { role: "system", content: "You are a concise benchmark probe assistant." },
+          { role: "user", content: prompt }
+        ],
+        { stream: body.stream !== false }
+      );
+      const after = metricsUrl ? await engineMetricsClient.scrape({ metricsUrl, engine }) : undefined;
+      return sendJson(response, {
+        actualStreamingTrace: result.actualStreamingTrace,
+        metrics: {
+          before,
+          after,
+          delta: diffEngineMetrics(before, after)
+        },
+        note: "Probe response excludes raw prompt, raw answer, and API key."
+      });
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/serving/replay") {
+      const body = await readJson(request);
+      const baseUrl = typeof body.baseUrl === "string" ? body.baseUrl.trim() : "";
+      if (!baseUrl) {
+        return sendJson(response, { error: "Real engine replay requires baseUrl. Use npm run benchmark:engine for offline dry-run." }, 400);
+      }
+      validateHttpEndpoint(baseUrl);
+      const requestCount = clampInteger(body.requestCount, 50, 1, 500);
+      const policies = normalizeBenchmarkPolicies(body.policies);
+      const traces = servingTraceStore.list({ limit: requestCount }).reverse();
+      const config = {
+        engine: normalizeEngine(body.engine),
+        baseUrl,
+        metricsUrl: typeof body.metricsUrl === "string" && body.metricsUrl.trim() ? validateMetricsUrl(body.metricsUrl.trim()) : undefined,
+        model: requireString(body.model, "model"),
+        stream: body.stream !== false,
+        source: body.source === "recent_traces" ? "recent_traces" as const : "synthetic" as const,
+        requestCount,
+        qps: clampNumber(body.qps, 1, 0.1, 100),
+        concurrency: clampInteger(body.concurrency, 4, 1, 128),
+        policies,
+        slo: normalizeServingSLO(body.slo),
+        dryRun: false
+      };
+      const requests =
+        config.source === "recent_traces" && traces.length > 0
+          ? engineBenchmarkRunner.requestsFromTraces(traces.slice(0, requestCount), policies)
+          : engineBenchmarkRunner.buildSyntheticRequests(requestCount, policies);
+      const report = await engineBenchmarkRunner.run(config, requests, typeof body.apiKey === "string" ? body.apiKey.trim() : undefined);
+      return sendJson(response, {
+        report,
+        markdown: renderEngineBenchmarkReport(report),
+        note: "Replay report excludes raw prompts, raw answers, and API keys."
+      });
     }
 
     if (request.method === "POST" && url.pathname === "/api/learning-loop/diagnose") {
@@ -554,6 +699,79 @@ function normalizeLearnerLevel(value: unknown): "beginner" | "intermediate" | "a
 
 function normalizeGroundingMode(value: unknown): GroundingMode {
   return value === "course_grounded_only" ? "course_grounded_only" : "allow_general_knowledge_with_label";
+}
+
+function normalizeServingOptimizationMode(value: unknown): "off" | "observe_only" | "adaptive" {
+  if (value === "off" || value === "observe_only" || value === "adaptive") return value;
+  const envValue = process.env.SERVING_OPTIMIZATION_MODE;
+  return envValue === "off" || envValue === "adaptive" || envValue === "observe_only" ? envValue : "observe_only";
+}
+
+function normalizeServingSLO(value: unknown): { ttftMs?: number; tpotMs?: number; e2eMs?: number } | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  return {
+    ttftMs: parseNumber(record.ttftMs),
+    tpotMs: parseNumber(record.tpotMs),
+    e2eMs: parseNumber(record.e2eMs)
+  };
+}
+
+function simulationConfigFromBody(body: Record<string, unknown>): PDSimulationConfig {
+  return {
+    slo: normalizeServingSLO(body.slo),
+    prefillWorkers: clampInteger(body.prefillWorkers, 1, 1, 128),
+    decodeWorkers: clampInteger(body.decodeWorkers, 1, 1, 128),
+    monolithicWorkers: clampInteger(body.monolithicWorkers, 1, 1, 128),
+    prefillMsPerToken: parseNumber(body.prefillMsPerToken),
+    decodeMsPerToken: parseNumber(body.decodeMsPerToken),
+    kvMsPerToken: parseNumber(body.kvMsPerToken)
+  };
+}
+
+function normalizeEngine(value: unknown): EngineKind {
+  if (value === "vllm" || value === "sglang" || value === "openai-compatible" || value === "unknown") return value;
+  return "openai-compatible";
+}
+
+function normalizeBenchmarkPolicies(value: unknown): EngineBenchmarkPolicy[] {
+  const allowed = new Set<EngineBenchmarkPolicy>(["full", "evidence_top_k", "current_page_only", "cache_first"]);
+  if (Array.isArray(value)) {
+    const policies = value.filter((item): item is EngineBenchmarkPolicy => typeof item === "string" && allowed.has(item as EngineBenchmarkPolicy));
+    if (policies.length) return [...new Set(policies)];
+  }
+  return ["full", "evidence_top_k", "current_page_only", "cache_first"];
+}
+
+function validateMetricsUrl(value: string): string {
+  const parsed = validateHttpEndpoint(value);
+  if (parsed.protocol === "file:") throw new Error("file:// metrics URLs are not allowed");
+  return parsed.toString();
+}
+
+function validateHttpEndpoint(value: string): URL {
+  const parsed = new URL(value);
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("Only http(s) endpoints are allowed");
+  }
+  const host = parsed.hostname.toLowerCase();
+  const localHosts = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+  if (!localHosts.has(host) && process.env.ALLOW_REMOTE_METRICS_URL !== "true") {
+    throw new Error("Remote engine/metrics URLs require ALLOW_REMOTE_METRICS_URL=true");
+  }
+  return parsed;
+}
+
+function clampInteger(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = Math.round(Number(value));
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+function clampNumber(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
 }
 
 function normalizeDifficulty(value: unknown): "easy" | "medium" | "hard" {

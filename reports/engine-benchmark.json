@@ -1,0 +1,235 @@
+{
+  "generatedAt": "2026-05-20T06:51:51.279Z",
+  "config": {
+    "engine": "openai-compatible",
+    "stream": false,
+    "source": "synthetic",
+    "requestCount": 10,
+    "qps": 1,
+    "concurrency": 4,
+    "policies": [
+      "full",
+      "evidence_top_k",
+      "current_page_only",
+      "cache_first"
+    ],
+    "slo": {
+      "ttftMs": 800,
+      "tpotMs": 80,
+      "e2eMs": 8000
+    },
+    "dryRun": true,
+    "baseUrlConfigured": false
+  },
+  "workload": {
+    "source": "synthetic",
+    "requestCount": 40,
+    "policies": [
+      "full",
+      "evidence_top_k",
+      "current_page_only",
+      "cache_first"
+    ]
+  },
+  "summaries": [
+    {
+      "policy": "full",
+      "requests": 10,
+      "dryRun": true,
+      "actualStreaming": false,
+      "latencyMeasurementMode": "dry_run_unmeasured",
+      "latencyAvailability": {
+        "ttft": "unavailable",
+        "itl": "unavailable",
+        "e2e": "unavailable"
+      },
+      "workloadSuccessRate": 1,
+      "actualGoodputUnderSLO": null,
+      "estimatedGoodputUnderSLO": null,
+      "successRate": 1,
+      "refusalRate": 0,
+      "confidenceAvg": 0.8,
+      "citationCountAvg": 2,
+      "promptTokensAvg": 83.2,
+      "promptTokensP90": 88,
+      "originalPromptTokensAvg": 83.2,
+      "originalPromptTokensP90": 88,
+      "canonicalPromptTokensAvg": 630.6,
+      "canonicalPromptTokensP90": 642,
+      "rawPromptTokensSentAvg": 83.2,
+      "rawPromptTokensSentP90": 88,
+      "stablePrefixTokensAvg": 377.8,
+      "stablePrefixTokensP90": 385,
+      "dynamicSuffixTokensAvg": 125.5,
+      "dynamicSuffixTokensP90": 130,
+      "cacheablePrefixTokensEstimateAvg": 377.8,
+      "cacheablePrefixTokensEstimateP90": 385,
+      "estimatedExtraTokensFromCanonicalizationAvg": 547.4,
+      "breakEvenCacheHitRateAvg": 1.449,
+      "breakEvenCacheHitRateP90": 1.462,
+      "tokenAccountingNotes": [
+        "Heuristic token accounting; not tokenizer-exact.",
+        "rawPromptTokensSent reflects the prompt shape for this context policy.",
+        "Break-even cache hit rate is above 100%; not worthwhile under this token model unless other engine effects dominate."
+      ],
+      "goodput": 0,
+      "qualityProxy": {
+        "citationCountAvg": 2,
+        "refusalRate": 0,
+        "confidenceAvg": 0.8
+      }
+    },
+    {
+      "policy": "evidence_top_k",
+      "requests": 10,
+      "dryRun": true,
+      "actualStreaming": false,
+      "latencyMeasurementMode": "dry_run_unmeasured",
+      "latencyAvailability": {
+        "ttft": "unavailable",
+        "itl": "unavailable",
+        "e2e": "unavailable"
+      },
+      "workloadSuccessRate": 1,
+      "actualGoodputUnderSLO": null,
+      "estimatedGoodputUnderSLO": null,
+      "successRate": 1,
+      "refusalRate": 0,
+      "confidenceAvg": 0.8,
+      "citationCountAvg": 2,
+      "promptTokensAvg": 96.5,
+      "promptTokensP90": 101,
+      "originalPromptTokensAvg": 86.2,
+      "originalPromptTokensP90": 91,
+      "canonicalPromptTokensAvg": 630.6,
+      "canonicalPromptTokensP90": 642,
+      "rawPromptTokensSentAvg": 96.5,
+      "rawPromptTokensSentP90": 101,
+      "stablePrefixTokensAvg": 377.8,
+      "stablePrefixTokensP90": 385,
+      "dynamicSuffixTokensAvg": 125.5,
+      "dynamicSuffixTokensP90": 130,
+      "cacheablePrefixTokensEstimateAvg": 377.8,
+      "cacheablePrefixTokensEstimateP90": 385,
+      "estimatedExtraTokensFromCanonicalizationAvg": 544.4,
+      "breakEvenCacheHitRateAvg": 1.441,
+      "breakEvenCacheHitRateP90": 1.454,
+      "tokenAccountingNotes": [
+        "Heuristic token accounting; not tokenizer-exact.",
+        "rawPromptTokensSent reflects the prompt shape for this context policy.",
+        "Break-even cache hit rate is above 100%; not worthwhile under this token model unless other engine effects dominate."
+      ],
+      "goodput": 0,
+      "qualityProxy": {
+        "citationCountAvg": 2,
+        "refusalRate": 0,
+        "confidenceAvg": 0.8
+      }
+    },
+    {
+      "policy": "current_page_only",
+      "requests": 10,
+      "dryRun": true,
+      "actualStreaming": false,
+      "latencyMeasurementMode": "dry_run_unmeasured",
+      "latencyAvailability": {
+        "ttft": "unavailable",
+        "itl": "unavailable",
+        "e2e": "unavailable"
+      },
+      "workloadSuccessRate": 1,
+      "actualGoodputUnderSLO": null,
+      "estimatedGoodputUnderSLO": null,
+      "successRate": 1,
+      "refusalRate": 0,
+      "confidenceAvg": 0.8,
+      "citationCountAvg": 1,
+      "promptTokensAvg": 78.5,
+      "promptTokensP90": 83,
+      "originalPromptTokensAvg": 86.9,
+      "originalPromptTokensP90": 92,
+      "canonicalPromptTokensAvg": 630.6,
+      "canonicalPromptTokensP90": 642,
+      "rawPromptTokensSentAvg": 78.5,
+      "rawPromptTokensSentP90": 83,
+      "stablePrefixTokensAvg": 377.8,
+      "stablePrefixTokensP90": 385,
+      "dynamicSuffixTokensAvg": 125.5,
+      "dynamicSuffixTokensP90": 130,
+      "cacheablePrefixTokensEstimateAvg": 377.8,
+      "cacheablePrefixTokensEstimateP90": 385,
+      "estimatedExtraTokensFromCanonicalizationAvg": 543.7,
+      "breakEvenCacheHitRateAvg": 1.44,
+      "breakEvenCacheHitRateP90": 1.454,
+      "tokenAccountingNotes": [
+        "Heuristic token accounting; not tokenizer-exact.",
+        "rawPromptTokensSent reflects the prompt shape for this context policy.",
+        "Break-even cache hit rate is above 100%; not worthwhile under this token model unless other engine effects dominate."
+      ],
+      "goodput": 0,
+      "qualityProxy": {
+        "citationCountAvg": 1,
+        "refusalRate": 0,
+        "confidenceAvg": 0.8
+      }
+    },
+    {
+      "policy": "cache_first",
+      "requests": 10,
+      "dryRun": true,
+      "actualStreaming": false,
+      "latencyMeasurementMode": "dry_run_unmeasured",
+      "latencyAvailability": {
+        "ttft": "unavailable",
+        "itl": "unavailable",
+        "e2e": "unavailable"
+      },
+      "workloadSuccessRate": 1,
+      "actualGoodputUnderSLO": null,
+      "estimatedGoodputUnderSLO": null,
+      "successRate": 1,
+      "refusalRate": 0,
+      "confidenceAvg": 0.8,
+      "citationCountAvg": 2,
+      "promptTokensAvg": 630.6,
+      "promptTokensP90": 642,
+      "originalPromptTokensAvg": 84.9,
+      "originalPromptTokensP90": 90,
+      "canonicalPromptTokensAvg": 630.6,
+      "canonicalPromptTokensP90": 642,
+      "rawPromptTokensSentAvg": 630.6,
+      "rawPromptTokensSentP90": 642,
+      "stablePrefixTokensAvg": 377.8,
+      "stablePrefixTokensP90": 385,
+      "dynamicSuffixTokensAvg": 125.5,
+      "dynamicSuffixTokensP90": 130,
+      "cacheablePrefixTokensEstimateAvg": 377.8,
+      "cacheablePrefixTokensEstimateP90": 385,
+      "estimatedExtraTokensFromCanonicalizationAvg": 545.7,
+      "breakEvenCacheHitRateAvg": 1.445,
+      "breakEvenCacheHitRateP90": 1.457,
+      "tokenAccountingNotes": [
+        "Heuristic token accounting; not tokenizer-exact.",
+        "cache_first may send a longer canonical prompt to increase stable prefix reuse.",
+        "Break-even cache hit rate is above 100%; not worthwhile under this token model unless other engine effects dominate."
+      ],
+      "goodput": 0,
+      "qualityProxy": {
+        "citationCountAvg": 2,
+        "refusalRate": 0,
+        "confidenceAvg": 0.8
+      }
+    }
+  ],
+  "interpretation": [
+    "Dry-run did not call a real engine, so TTFT/ITL/E2E fields are intentionally empty and actualGoodputUnderSLO is n/a.",
+    "cache_first may intentionally send a longer canonical prompt to maximize stable prefix reuse.",
+    "Without a real prefix-cache engine, token savings are predictions only; cache_first is a candidate to test on vLLM/SGLang, not a proven optimization."
+  ],
+  "notes": [
+    "Reports intentionally exclude raw prompts, raw answers, and API keys.",
+    "Dry-run validates workload shape and prompt component statistics only. It does not measure real TTFT, ITL, E2E, or SLO goodput.",
+    "cache_first may intentionally send a longer canonical prompt to maximize stable prefix reuse; without a real prefix-cache engine, token savings are predicted only.",
+    "OpenAI-compatible usage tokens may differ from the engine tokenizer."
+  ]
+}

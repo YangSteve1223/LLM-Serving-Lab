@@ -38,6 +38,7 @@ export * from "./learningLoop/index.ts";
 export * from "./resources/index.ts";
 export * from "./teacher/index.ts";
 export * from "./futureSchool/index.ts";
+export * from "./serving/index.ts";
 export type {
   AssistantAgentResponse,
   AgentDecisionTrace,
