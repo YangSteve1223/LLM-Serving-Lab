@@ -61,3 +61,64 @@ export type { ContinuousBatchingPolicy, SchedulerConfig } from "./ContinuousBatc
 
 // ==================== Exact Token Estimator ====================
 export { ExactTokenEstimator, BPETokenizer, createExactTokenEstimator, exactTokenEstimator, bpeTokenEstimator, tiktokenEstimator, estimateTokensExact } from "./ExactTokenEstimator.ts";
+
+// ==================== Serving Pipeline ====================
+export { LLMServingPipeline, createPipeline, getPipeline } from "./ServingPipeline.ts";
+export type { PipelineConfig, PipelineRequest, PipelineResult, StrategyComparisonResult, PipelineReport } from "./ServingPipeline.ts";
+
+// ==================== Benchmark Module ====================
+export { DeepSeekLatencyProber, createDeepSeekLatencyProber, DEFAULT_TEST_SCENARIOS } from "./benchmark/index.ts";
+export type { LatencyMeasurement, TestScenario, ScenarioResult, CalibrationResult, LatencyBaseline } from "./benchmark/index.ts";
+
+// ==================== Calibration Module ====================
+export { CalibrationPipeline, createCalibrationPipeline } from "./calibration/index.ts";
+export type { ComponentCalibrationConfig, SchedulingCalibrationConfig, CacheCalibrationConfig, CalibrationConfig, CalibrationStageResult, FullCalibrationReport } from "./calibration/index.ts";
+
+// ==================== Cache Module ====================
+export { RadixPrefixCacheManager, radixPrefixCacheManager } from "./cache/RadixPrefixCacheManager.ts";
+export type { 
+  CacheEntry, 
+  CacheStats, 
+  CacheAwarePDSimulationResult, 
+  EvictionStrategy,
+  RadixTreeConfig,
+  CourseCacheGroup
+} from "./cache/RadixPrefixCacheManager.ts";
+
+export { HierarchicalKVCache, hierarchicalKVCache } from "./cache/HierarchicalKVCache.ts";
+export type {
+  CacheTier,
+  PrefetchStrategy,
+  WritePolicy,
+  TierConfig,
+  KVCacheEntry,
+  CacheMigration,
+  HierarchicalCacheStats,
+  CacheRequest,
+  CacheResponse
+} from "./cache/HierarchicalKVCache.ts";
+
+export { CacheExperimentRunner, createDefaultExperiment, createComprehensiveExperiment } from "./cache/CacheExperimentRunner.ts";
+export type {
+  ExperimentType,
+  ExperimentConfig,
+  ExperimentMetrics,
+  ExperimentResult,
+  ExperimentReport
+} from "./cache/CacheExperimentRunner.ts";
+
+// ==================== Workload Module ====================
+export { 
+  EducationalWorkloadModel,
+  createTypicalWorkload,
+  createHeavyWorkload,
+  createLightWorkload
+} from "./workload/EducationalWorkloadModel.ts";
+export type {
+  TaskType,
+  ArrivalPattern,
+  WorkloadProfile,
+  WorkloadConfig,
+  SyntheticRequest,
+  WorkloadAnalysis
+} from "./workload/EducationalWorkloadModel.ts";

@@ -205,6 +205,194 @@ const server = createServer(async (request, response) => {
       });
     }
 
+    // ==================== NEW API ENDPOINTS v1 ====================
+    
+    // POST /api/v1/simulate - Execute PD separation simulation
+    if (request.method === "POST" && url.pathname === "/api/v1/simulate") {
+      const body = await readJson(request);
+      const { LLMServingPipeline } = await import("../../src/agents/learningAssistant/serving/ServingPipeline.ts");
+      const { EnhancedPDServingSimulator } = await import("../../src/agents/learningAssistant/serving/EnhancedPDServingSimulator.ts");
+      
+      const simulator = new EnhancedPDServingSimulator({
+        prefillWorkers: clampInteger(body.prefillWorkers, 2, 1, 128),
+        decodeWorkers: clampInteger(body.decodeWorkers, 4, 1, 128),
+        slo: normalizeServingSLO(body.slo) ?? { ttftMs: 1000, tpotMs: 100, e2eMs: 10000 }
+      });
+      
+      const requestCount = clampInteger(body.requestCount, 100, 1, 1000);
+      const workload = [];
+      for (let i = 0; i < requestCount; i++) {
+        workload.push({
+          id: `req-${i}`,
+          inputTokens: Math.floor(Math.random() * 2000) + 128,
+          outputTokens: Math.floor(Math.random() * 256) + 64,
+          arrivalTimeMs: i * 100,
+          priority: Math.floor(Math.random() * 5) + 1
+        });
+      }
+      
+      const results = workload.map(req => simulator.simulateRequest(req, 0));
+      const avgTTFT = results.reduce((sum, r) => sum + r.prefillTimeMs + r.kvTransferTimeMs, 0) / results.length;
+      const avgTPOT = results.reduce((sum, r) => sum + r.decodeTimeMs / Math.max(1, r.outputTokens), 0) / results.length;
+      
+      return sendJson(response, {
+        requestCount,
+        avgTTFTMs: avgTTFT,
+        avgTPOTMs: avgTPOT,
+        config: simulator.getConfig?.() ?? simulator.config
+      });
+    }
+
+    // POST /api/v1/compare - Compare different PD strategies
+    if (request.method === "POST" && url.pathname === "/api/v1/compare") {
+      const body = await readJson(request);
+      const { ContinuousBatchingScheduler } = await import("../../src/agents/learningAssistant/serving/ContinuousBatchingScheduler.ts");
+      const { EnhancedPDServingSimulator } = await import("../../src/agents/learningAssistant/serving/EnhancedPDServingSimulator.ts");
+      
+      const simulator = new EnhancedPDServingSimulator();
+      const scheduler = new ContinuousBatchingScheduler(simulator);
+      
+      const requestCount = clampInteger(body.requestCount, 50, 1, 500);
+      const workload = [];
+      for (let i = 0; i < requestCount; i++) {
+        workload.push({
+          id: `req-${i}`,
+          inputTokens: Math.floor(Math.random() * 2000) + 128,
+          outputTokens: Math.floor(Math.random() * 256) + 64,
+          arrivalTimeMs: i * 100,
+          priority: Math.floor(Math.random() * 5) + 1
+        });
+      }
+      
+      const policies = ["fcfs", "sjf", "slo_aware"];
+      const results = policies.map(policy => {
+        const result = scheduler.runScheduling(workload, policy as any);
+        return {
+          policy,
+          goodput: result.goodput,
+          latency: result.latency
+        };
+      });
+      
+      return sendJson(response, { comparisons: results });
+    }
+
+    // POST /api/v1/pipeline - End-to-end request processing
+    if (request.method === "POST" && url.pathname === "/api/v1/pipeline") {
+      const body = await readJson(request);
+      const { LLMServingPipeline } = await import("../../src/agents/learningAssistant/serving/ServingPipeline.ts");
+      
+      const pipeline = new LLMServingPipeline({
+        enableCaching: body.enableCaching !== false,
+        enableChunkedPrefill: body.enableChunkedPrefill !== false,
+        enableSLOTracking: body.enableSLOTracking !== false,
+        defaultPolicy: (body.policy as any) ?? "slo_aware"
+      });
+      
+      const requests = Array.isArray(body.requests) ? body.requests : [{
+        id: `req-${Date.now()}`,
+        prompt: requireString(body.prompt, "prompt"),
+        maxTokens: clampInteger(body.maxTokens, 256, 1, 4096),
+        arrivalTimeMs: Date.now()
+      }];
+      
+      const report = await pipeline.runFullPipeline(requests, body.compareStrategies === true);
+      
+      return sendJson(response, { report });
+    }
+
+    // GET /api/v1/report - Get simulation report
+    if (request.method === "GET" && url.pathname === "/api/v1/report") {
+      const traces = servingTraceStore.list({ limit: 100 });
+      const pdSimulator = new (await import("../../src/agents/learningAssistant/serving/EnhancedPDServingSimulator.ts")).EnhancedPDServingSimulator();
+      
+      const stats = traces.length > 0 ? {
+        totalTraces: traces.length,
+        avgInputTokens: traces.reduce((sum, t) => sum + (t.inputTokens ?? 0), 0) / traces.length,
+        avgOutputTokens: traces.reduce((sum, t) => sum + (t.outputTokens ?? 0), 0) / traces.length,
+        avgTTFT: traces.reduce((sum, t) => sum + (t.ttftMs ?? 0), 0) / traces.length,
+        sloCompliance: traces.filter(t => t.sloMet).length / traces.length
+      } : null;
+      
+      return sendJson(response, { stats, traceCount: traces.length });
+    }
+
+    // GET /api/v1/calibration - Get calibration results
+    if (request.method === "GET" && url.pathname === "/api/v1/calibration") {
+      const baselinePath = path.join(rootDir, "reports", "deepseek-latency-baseline.json");
+      let calibration = null;
+      
+      try {
+        const content = await fs.readFile(baselinePath, "utf-8");
+        const baseline = JSON.parse(content);
+        calibration = {
+          status: baseline.scenarios?.length > 0 ? "calibrated" : "uncalibrated",
+          scenariosTested: baseline.scenarios?.length ?? 0,
+          avgTTFT: baseline.overallStats?.avgTTFT ?? 0,
+          avgTPOT: baseline.overallStats?.avgTPOT ?? 0,
+          avgThroughput: baseline.overallStats?.avgThroughput ?? 0,
+          generatedAt: baseline.generatedAt
+        };
+      } catch {
+        calibration = { status: "no_baseline", scenariosTested: 0 };
+      }
+      
+      return sendJson(response, calibration);
+    }
+
+    // GET /api/v1/dashboard - Dashboard data
+    if (request.method === "GET" && url.pathname === "/api/v1/dashboard") {
+      const traces = servingTraceStore.list({ limit: 100 });
+      const baselinePath = path.join(rootDir, "reports", "deepseek-latency-baseline.json");
+      
+      // Calculate latency percentiles
+      const ttftValues = traces.map(t => t.ttftMs ?? 0).sort((a, b) => a - b);
+      const tpotValues = traces.map(t => t.tpotMs ?? 0).sort((a, b) => a - b);
+      
+      const percentile = (arr: number[], p: number) => {
+        if (arr.length === 0) return 0;
+        const idx = Math.ceil((p / 100) * arr.length) - 1;
+        return arr[Math.max(0, idx)];
+      };
+      
+      // Get calibration status
+      let calibration = { ttftMape: 0, tpotMape: 0, status: "no_baseline" };
+      try {
+        const content = await fs.readFile(baselinePath, "utf-8");
+        const baseline = JSON.parse(content);
+        if (baseline.scenarios?.length > 0) {
+          calibration = {
+            ttftMape: 0, // Would need calibration comparison
+            tpotMape: 0,
+            status: "calibrated"
+          };
+        }
+      } catch { /* No baseline */ }
+      
+      const dashboard = {
+        throughput: {
+          current: traces.length > 0 ? traces.length : 0,
+          history: traces.slice(-20).map(t => t.outputTokens ?? 0)
+        },
+        latency: {
+          p50: percentile(ttftValues, 50),
+          p95: percentile(ttftValues, 95),
+          p99: percentile(ttftValues, 99)
+        },
+        scheduler: {
+          running: traces.filter(t => (t.ttftMs ?? 0) < 1000).length,
+          waiting: traces.filter(t => (t.ttftMs ?? 0) >= 1000).length,
+          sloOk: traces.filter(t => t.sloMet).length,
+          sloMiss: traces.filter(t => !t.sloMet).length
+        },
+        calibration,
+        pdComparison: [] // Would be populated from strategy comparison
+      };
+      
+      return sendJson(response, dashboard);
+    }
+
+
     if (request.method === "GET" && url.pathname === "/api/serving/engine-metrics") {
       const metricsUrl = requireString(url.searchParams.get("metricsUrl"), "metricsUrl");
       const engine = normalizeEngine(url.searchParams.get("engine"));
