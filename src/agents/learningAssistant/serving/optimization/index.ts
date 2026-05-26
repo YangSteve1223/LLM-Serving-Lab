@@ -5,6 +5,7 @@
  * - KVCacheCompressor: Attention entropy-based compression
  * - ContextBudgetPlanner: Intelligent context trimming
  * - ChunkedPrefillCoordinator: Cross-chunk cache coordination
+ * - AdaptiveChunkedPrefillCoordinator: Dynamic chunk sizing based on load/SLO
  * - RLStrategySelector: Q-learning strategy selection
  */
 
@@ -27,6 +28,7 @@ export {
   type ComponentPriority,
   type BudgetDecision,
   type BudgetAllocation,
+  type SystemMetricsState,
   type SystemState,
   type CompressionStrategy,
   type ContextBudgetConfig
@@ -44,6 +46,18 @@ export {
   type ChunkCoordinatorStats
 } from "./ChunkedPrefillCoordinator.ts";
 
+// Adaptive Chunked Prefill Coordinator
+export {
+  AdaptiveChunkedPrefillCoordinator,
+  createAdaptiveCoordinator,
+  createLowLatencyCoordinator,
+  createThroughputOptimizedCoordinator,
+  type AdaptiveChunkConfig,
+  type AdaptiveChunkMetrics,
+  type ChunkingDecision,
+  type AdaptiveStrategy
+} from "./AdaptiveChunkedPrefillCoordinator.ts";
+
 // RL Strategy Selector
 export {
   RLStrategySelector,
@@ -51,6 +65,7 @@ export {
   runRLEpisode,
   type SchedulingStrategy,
   type CompressionLevel,
+  type SystemMetricsState,
   type SystemState as RLSystemState,
   type Action,
   type QTable,

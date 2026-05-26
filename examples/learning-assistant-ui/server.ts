@@ -20,7 +20,7 @@ import {
   OpenAICompatibleLLMClient,
   EngineBenchmarkRunner,
   EngineMetricsClient,
-  PDServingSimulator,
+  EnhancedPDServingSimulator,
   PowerPointComSlideRenderer,
   RequestTraceStore,
   ResourceLibraryStore,
@@ -34,7 +34,7 @@ import {
   materialToMarkdown,
   pageToMarkdown,
   renderEngineBenchmarkReport,
-  renderPDReport,
+  renderEnhancedPDReport,
   type AnswerStylePreference,
   type EngineBenchmarkPolicy,
   type EngineKind,
@@ -83,7 +83,7 @@ const servingTraceStore = new RequestTraceStore({
   tracePath: process.env.SERVING_TRACE_PATH ?? path.join(rootDir, "reports", "serving-traces.jsonl"),
   enabledJsonl: true
 });
-const pdServingSimulator = new PDServingSimulator();
+const pdServingSimulator = new EnhancedPDServingSimulator();
 const engineMetricsClient = new EngineMetricsClient();
 const engineBenchmarkRunner = new EngineBenchmarkRunner();
 

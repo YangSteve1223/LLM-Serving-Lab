@@ -9,7 +9,7 @@ import {
   PRC_CONFIG,
   TII_CONFIG,
   BASELINE_STRATEGIES
-} from '../../../src/agents/learningAssistant/serving/experiment/ServingExperimentRunner.ts';
+} from '../../../src/agents/learningAssistant/serving/experiment/ExperimentMatrix.ts';
 
 describe('ServingExperimentRunner', () => {
   let runner: ServingExperimentRunner;

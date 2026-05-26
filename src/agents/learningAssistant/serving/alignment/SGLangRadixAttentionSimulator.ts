@@ -14,6 +14,7 @@ import type {
   SchedulingDecision, 
   ServingSLO 
 } from "../ServingTrace.ts";
+import { DeterministicRandom } from "../utils/DeterministicRandom.ts";
 
 export interface RadixAttentionConfig {
   enableLSPFirst: boolean;     // Longest-Shared-Prefix-First scheduling
@@ -98,12 +99,14 @@ export class SGLangRadixAttentionSimulator {
   private prefixTree: Map<string, RadixRequestNode[]>; // token -> requests with this prefix
   private requestNodes: Map<string, RadixRequestNode>;
   private globalPrefix: number[]; // Global shared prefix across all requests
+  private rng: DeterministicRandom;
 
-  constructor(config: Partial<RadixAttentionConfig> = {}) {
+  constructor(config: Partial<RadixAttentionConfig> = {}, seed?: number) {
     this.config = { ...DEFAULT_RADIX_CONFIG, ...config };
     this.prefixTree = new Map();
     this.requestNodes = new Map();
     this.globalPrefix = [];
+    this.rng = new DeterministicRandom(seed ?? 42);
   }
 
   /**
@@ -407,7 +410,7 @@ export class SGLangRadixAttentionSimulator {
         };
       }
     } else if (node.state === "decoding") {
-      const tpot = 15 + Math.random() * 10; // Simulated TPOT
+      const tpot = 15 + this.rng.randomFloat(0, 10); // Simulated TPOT
       node.tpotActual.push(tpot);
       
       const decodeProgress = node.tpotActual.length;

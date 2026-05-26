@@ -1,0 +1,52 @@
+# KV Cache Reuse Analysis Configuration
+# Analyzes cache efficiency under different prefix overlap patterns
+
+id: kv_reuse_analysis
+name: KV Cache Reuse Analysis
+description: Analyze cache efficiency under different prefix overlap patterns
+seed: 42
+
+workload:
+  requestCount: 100
+  tokenDistribution: realistic
+  avgPromptTokens: 1024
+  avgCompletionTokens: 256
+  qps: 10
+  duration: "60s"
+  variance: 0.3
+
+simulator:
+  architecture: pd_separated
+  prefillGpu:
+    gpuType: compute_heavy
+    numGpus: 2
+  decodeGpu:
+    gpuType: memory_heavy
+    numGpus: 4
+  kvTransferMs: 3
+
+cache:
+  type: radix
+  capacityMB: 2048
+  blockSizeTokens: 64
+  evictionPolicy: lru
+  enableCompression: true
+
+scheduler:
+  type: slo_aware
+  maxBatchSize: 16
+  stepBudgetMs: 100
+  sloTargetMs: 2000
+  slo:
+    ttftMs: 2000
+    tpotMs: 150
+    e2eMs: 20000
+
+statistical:
+  repetitions: 10
+  warmupIterations: 5
+  confidenceLevel: 0.95
+  significanceThreshold: 0.05
+
+enableChunkedPrefill: true
+chunkSize: 512

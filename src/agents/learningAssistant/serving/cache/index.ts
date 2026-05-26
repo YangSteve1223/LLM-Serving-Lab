@@ -34,3 +34,25 @@ export type {
   ExperimentResult,
   ExperimentReport
 } from "./CacheExperimentRunner.ts";
+
+// ==================== Abstract Cache Interface & Adapters ====================
+export { AbstractPrefixCache } from "./AbstractPrefixCache.ts";
+export type { CacheLookupResult, CacheStats } from "./AbstractPrefixCache.ts";
+
+export { RadixCacheAdapter } from "./RadixCacheAdapter.ts";
+export type { RadixCacheAdapterConfig } from "./RadixCacheAdapter.ts";
+
+export { HashCacheAdapter } from "./HashCacheAdapter.ts";
+export type { HashCacheAdapterConfig } from "./HashCacheAdapter.ts";
+
+// ==================== KV-Cache Reuse Analyzer ====================
+export {
+  KVCacheReuseAnalyzer,
+  createReuseAnalyzer,
+  defaultReuseAnalyzer,
+  type KVCacheReuseMetrics,
+  type CostAnalysis,
+  type DetailedReuseStats,
+  type ReuseSegment,
+  type CacheComparisonResult
+} from "./KVCacheReuseAnalyzer.ts";

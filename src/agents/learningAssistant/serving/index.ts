@@ -2,16 +2,8 @@ export { ContextBudgetPlanner, contextBudgetPlanner, compressEvidence } from "./
 export type { ContextBudgetPlannerInput, ContextBudgetPlan } from "./ContextBudgetPlanner.ts";
 export { CacheAwarePromptBuilder, cacheAwarePromptBuilder, stripRequestVolatileText } from "./CacheAwarePromptBuilder.ts";
 export type { CacheAwarePromptPlan, PromptComponent } from "./CacheAwarePromptBuilder.ts";
-export { PhaseTimer } from "./PhaseTimer.ts";
-export { PDServingSimulator, DEFAULT_PD_SIM_CONFIG, pdServingSimulator } from "./PDServingSimulator.ts";
-export { renderPDReport } from "./PDReportRenderer.ts";
-export { SimulatorCalibrator, applyCalibration } from "./SimulatorCalibrator.ts";
-export type { SimulatorCalibrationSuggestion } from "./SimulatorCalibrator.ts";
 export { hashText, stableJson } from "./PromptComponentHasher.ts";
-export { normalizePromptCanonicalizationMode } from "./PromptCanonicalizationPolicy.ts";
-export type { ContextReplayPolicy, PromptCanonicalizationMode } from "./PromptCanonicalizationPolicy.ts";
 export { RequestTraceStore, createQueryHash, createRequestId, sanitizeTrace } from "./RequestTraceStore.ts";
-export { TokenEstimator, estimateTokens, tokenEstimator } from "./TokenEstimator.ts";
 export { EngineMetricsClient, diffEngineMetrics } from "./engines/EngineMetricsClient.ts";
 export { EngineBenchmarkRunner, engineBenchmarkRunner, renderEngineBenchmarkReport } from "./engines/EngineBenchmarkRunner.ts";
 export { normalizeEngineKind, inferEngineFromMetricNames } from "./engines/EngineProvider.ts";
@@ -62,11 +54,7 @@ export type { ContinuousBatchingPolicy, SchedulerConfig } from "./ContinuousBatc
 // ==================== Exact Token Estimator ====================
 export { ExactTokenEstimator, BPETokenizer, createExactTokenEstimator, exactTokenEstimator, bpeTokenEstimator, tiktokenEstimator, estimateTokensExact } from "./ExactTokenEstimator.ts";
 
-// ==================== Serving Pipeline ====================
-export { LLMServingPipeline, createPipeline, getPipeline } from "./ServingPipeline.ts";
-export type { PipelineConfig, PipelineRequest, PipelineResult, StrategyComparisonResult, PipelineReport } from "./ServingPipeline.ts";
-
-// ==================== Benchmark Module ====================
+// ==================== Serving Pipeline V2 ====================
 export { DeepSeekLatencyProber, createDeepSeekLatencyProber, DEFAULT_TEST_SCENARIOS } from "./benchmark/index.ts";
 export type { LatencyMeasurement, TestScenario, ScenarioResult, CalibrationResult, LatencyBaseline } from "./benchmark/index.ts";
 
@@ -82,7 +70,7 @@ export type {
   CacheAwarePDSimulationResult, 
   EvictionStrategy,
   RadixTreeConfig,
-  CourseCacheGroup
+  RequestGroup
 } from "./cache/RadixPrefixCacheManager.ts";
 
 export { HierarchicalKVCache, hierarchicalKVCache } from "./cache/HierarchicalKVCache.ts";
@@ -109,11 +97,11 @@ export type {
 
 // ==================== Workload Module ====================
 export { 
-  EducationalWorkloadModel,
+  ServingWorkloadModel,
   createTypicalWorkload,
   createHeavyWorkload,
   createLightWorkload
-} from "./workload/EducationalWorkloadModel.ts";
+} from "./workload/index.ts";
 export type {
   TaskType,
   ArrivalPattern,
@@ -121,4 +109,117 @@ export type {
   WorkloadConfig,
   SyntheticRequest,
   WorkloadAnalysis
-} from "./workload/EducationalWorkloadModel.ts";
+} from "./workload/index.ts";
+// ==================== Abstract Cache Interface & Adapters (Branch A) ====================
+export { AbstractPrefixCache } from "./cache/AbstractPrefixCache.ts";
+export type { CacheLookupResult, CacheStats } from "./cache/AbstractPrefixCache.ts";
+export { RadixCacheAdapter } from "./cache/RadixCacheAdapter.ts";
+export type { RadixCacheAdapterConfig } from "./cache/RadixCacheAdapter.ts";
+export { HashCacheAdapter } from "./cache/HashCacheAdapter.ts";
+export type { HashCacheAdapterConfig } from "./cache/HashCacheAdapter.ts";
+
+// ==================== Abstract Scheduler Interface & Adapters (Branch A) ====================
+export { AbstractScheduler } from "./scheduling/SchedulerInterface.ts";
+export type { SchedulingWorkload, SchedulingMetrics, SchedulingResult } from "./scheduling/SchedulerInterface.ts";
+export { ContinuousBatchingAdapter } from "./scheduling/ContinuousBatchingAdapter.ts";
+export type { ContinuousBatchingAdapterConfig } from "./scheduling/ContinuousBatchingAdapter.ts";
+export { SGLangRadixAdapter } from "./scheduling/SGLangRadixAdapter.ts";
+export type { SGLangRadixAdapterConfig, SGLangPolicy } from "./scheduling/SGLangRadixAdapter.ts";
+
+// ==================== Speculative Decoding Module (Branch B) ====================
+export { SpeculativeDecodingSimulator, speculativeDecodingSimulator } from "./speculative/SpeculativeDecodingSimulator.ts";
+export type {
+  SpeculativeDecodingConfig,
+  SpeculativeRoundResult,
+  SpeculativeResult,
+  ComparisonResult,
+  SpeculativeWorkloadRequest
+} from "./speculative/SpeculativeDecodingSimulator.ts";
+export {
+  DRAFT_TARGET_PAIRS,
+  createDraftTargetPair,
+  getRecommendedPair,
+  estimateSpeedupRatio,
+  estimateAcceptanceRate
+} from "./speculative/DraftTargetPair.ts";
+export type { DraftModelType, DraftTargetPairConfig } from "./speculative/DraftTargetPair.ts";
+export { SpeculativeSchedulingIntegration, speculativeSchedulingIntegration } from "./speculative/SpeculativeSchedulingIntegration.ts";
+export type {
+  SpeculativeDecision,
+  SpeculativeSchedulingConfig,
+  SpeculativeSchedulingResult,
+  WorkloadCharacteristics
+} from "./speculative/SpeculativeSchedulingIntegration.ts";
+
+// ==================== Experiment Module (Branch B) ====================
+export { ServingExperimentRunner, createServingExperimentRunner } from "./experiment/index.ts";
+export type {
+  LengthOfContextRequest,
+  PrefillResponseContent,
+  TrafficIntensity,
+  LCRPMatrix,
+  LCRPExperimentConfig,
+  BaselineStrategy,
+  LCRPExperimentResult,
+  LCRPExperimentReport
+} from "./experiment/index.ts";
+export { AblationStudyRunner, ablationStudyRunner, createStandardAblationConfig } from "./experiment/AblationStudyRunner.ts";
+export type {
+  AblationModule,
+  AblationConfig,
+  AblationStepResult,
+  AblationStudyResult
+} from "./experiment/AblationStudyRunner.ts";
+export { APIExperimentRunner, apiExperimentRunner, STANDARD_SCENARIOS } from "./experiment/APIExperimentRunner.ts";
+export type {
+  TestScenario,
+  APIMeasurement,
+  SimMeasurement,
+  ComparisonReport,
+  CalibrationParams
+} from "./experiment/APIExperimentRunner.ts";
+export { StatisticalReporter, statisticalReporter } from "./experiment/StatisticalReporter.ts";
+export type {
+  Measurement,
+  MetricStats,
+  StatisticalSummary,
+  ExperimentConditions,
+  StatisticalTest
+} from "./experiment/StatisticalReporter.ts";
+
+// ==================== Calibration Feedback Loop ====================
+export { CalibrationFeedbackLoop } from "./experiment/CalibrationFeedbackLoop.ts";
+export type {
+  ConvergenceCriteria,
+  CalibrationIterationResult,
+  CalibrationFeedbackLoopResult,
+  CalibrationFeedbackLoopConfig
+} from "./experiment/CalibrationFeedbackLoop.ts";
+
+// ==================== Pipeline Module V2 ====================
+export { ServingPipelineV2, createPipelineV2 } from "./pipeline/ServingPipelineV2.ts";
+export type {
+  PipelineV2Config,
+  CacheType,
+  SchedulerType,
+  CacheLookupWithRequest,
+  PipelineSchedulingResult,
+  PipelineV2Result
+} from "./pipeline/ServingPipelineV2.ts";
+// ==================== Unified Metrics Types ====================
+export {
+  type LatencyMetrics,
+  type ThroughputMetrics,
+  type EfficiencyMetrics,
+  type UnifiedMetrics,
+  type LatencyPercentiles,
+  type UnifiedPercentileMetrics,
+  type MetricsSummary,
+  type UnifiedMetricsStats,
+  secondsToMs,
+  msToSeconds,
+  ratioToPercent,
+  percentToRatio,
+  createUnifiedMetrics,
+  validateMetrics
+} from "./types/index.ts";

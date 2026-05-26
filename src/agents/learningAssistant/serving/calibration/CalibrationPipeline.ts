@@ -19,6 +19,7 @@ import { ContinuousBatchingScheduler, type ContinuousBatchingPolicy } from "../C
 import { ExactTokenEstimator } from "../ExactTokenEstimator.ts";
 import type { PDWorkloadRequest, ServingSLO } from "../ServingTrace.ts";
 import { CacheAwarePromptBuilder } from "../CacheAwarePromptBuilder.ts";
+import { DeterministicRandom } from "../utils/DeterministicRandom.ts";
 
 export interface ComponentCalibrationConfig {
   prefillThroughputTokensPerSec: number;
@@ -84,12 +85,14 @@ export class CalibrationPipeline {
   private prober: DeepSeekLatencyProber | null = null;
   private config: CalibrationConfig;
   private baseline: LatencyBaseline | null = null;
+  private rng: DeterministicRandom;
 
-  constructor(apiKey?: string) {
+  constructor(apiKey?: string, seed?: number) {
     this.simulator = new EnhancedPDServingSimulator();
     this.scheduler = new ContinuousBatchingScheduler(this.simulator);
     this.tokenEstimator = new ExactTokenEstimator();
     this.promptBuilder = new CacheAwarePromptBuilder();
+    this.rng = new DeterministicRandom(seed ?? 42);
     
     if (apiKey) {
       this.prober = new DeepSeekLatencyProber(apiKey);
@@ -349,7 +352,7 @@ export class CalibrationPipeline {
     const seen = new Set<string>();
     
     for (let i = 0; i < hashTests; i++) {
-      const prompt = `test-prompt-${i}-${Math.random()}`;
+      const prompt = `test-prompt-${i}-${this.rng.random()}`;
       const { hashText } = await import("../PromptComponentHasher.ts");
       const hash = hashText(prompt);
       

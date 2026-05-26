@@ -21,6 +21,9 @@ import type {
   LayerKVTransferEvent,
   ServingSLO
 } from "./ServingTrace.ts";
+import { round } from "./utils/MathUtils.ts";
+import { SIMULATION_CONSTANTS } from "./constants.ts";
+import { generateSyntheticWorkload as createWorkload } from "./workload/ServingWorkloadModel.ts";
 
 // Llama-70B model parameters
 const LLAMA_70B_KV_SIZE_PER_TOKEN_PER_LAYER_MB = 0.64; // ~640MB for 80 layers
@@ -81,11 +84,11 @@ export class EnhancedPDServingSimulator {
       prefillWorkers: config.prefillWorkers ?? 2,
       decodeWorkers: config.decodeWorkers ?? 4,
       monolithicWorkers: config.monolithicWorkers ?? 4,
-      prefillBaseMs: config.prefillBaseMs ?? 25,
-      decodeBaseMs: config.decodeBaseMs ?? 10,
+      prefillBaseMs: config.prefillBaseMs ?? SIMULATION_CONSTANTS.BASE_PREFILL_OVERHEAD_MS,
+      decodeBaseMs: config.decodeBaseMs ?? SIMULATION_CONSTANTS.BASE_DECODE_OVERHEAD_MS,
       kvBaseMs: config.kvBaseMs ?? 5,
-      prefillMsPerToken: config.prefillMsPerToken ?? 0.18,
-      decodeMsPerToken: config.decodeMsPerToken ?? 18,
+      prefillMsPerToken: config.prefillMsPerToken ?? SIMULATION_CONSTANTS.PREFILL_MS_PER_TOKEN,
+      decodeMsPerToken: config.decodeMsPerToken ?? SIMULATION_CONSTANTS.DECODE_MS_PER_TOKEN,
       kvMsPerToken: config.kvMsPerToken ?? 0.015,
       interferencePenalty: config.interferencePenalty ?? 1.18,
       // Enhanced config
@@ -499,10 +502,17 @@ export class EnhancedPDServingSimulator {
     const workers = Array.from({ length: cfg.monolithicWorkers }, () => 0);
     const runs: Array<{ ttft: number; tpot: number; e2e: number; prefillQueue: number; decodeQueue: number; prefillBusy: number; decodeBusy: number }> = [];
     
+    // Monolithic: prefill and decode share resources, causing interference
+    // Calculate average interference multiplier for reporting
+    let interferenceMultiplierSum = 0;
+    
     for (const request of this.sortByArrival(workload)) {
       const workerIndex = this.minIndex(workers);
-      const prefillMs = (cfg.prefillBaseMs + request.prefillTokens * cfg.prefillMsPerToken) * cfg.interferencePenalty;
-      const decodeMs = (cfg.decodeBaseMs + request.decodeTokens * cfg.decodeMsPerToken) * cfg.interferencePenalty;
+      // Monolithic interference penalty is higher due to resource sharing
+      const interferenceMultiplier = cfg.interferencePenalty * (1 + Math.log10(request.prefillTokens + request.decodeTokens) * 0.05);
+      interferenceMultiplierSum += interferenceMultiplier;
+      const prefillMs = (cfg.prefillBaseMs + request.prefillTokens * cfg.prefillMsPerToken) * interferenceMultiplier;
+      const decodeMs = (cfg.decodeBaseMs + request.decodeTokens * cfg.decodeMsPerToken) * interferenceMultiplier;
       const start = Math.max(request.arrivalMs, workers[workerIndex]);
       const prefillDone = start + prefillMs;
       const done = prefillDone + decodeMs;
@@ -519,6 +529,8 @@ export class EnhancedPDServingSimulator {
       });
     }
     
+    const avgInterferenceMultiplier = workload.length > 0 ? interferenceMultiplierSum / workload.length : cfg.interferencePenalty;
+    
     const horizon = Math.max(1, ...runs.map(r => r.e2e));
     const slo = config.slo ?? {};
     const good = runs.filter(run => {
@@ -528,8 +540,22 @@ export class EnhancedPDServingSimulator {
       return true;
     });
     const goodput = good.length / workload.length;
+    
+    // Calculate utilization for monolithic case
     const totalBusy = runs.reduce((sum, run) => sum + run.prefillBusy + run.decodeBusy, 0);
-    const util = totalBusy / (cfg.monolithicWorkers * horizon);
+    const totalCapacity = cfg.monolithicWorkers * horizon;
+    const monolithicUtil = totalCapacity > 0 ? totalBusy / totalCapacity : 0;
+    
+    // For monolithic, both prefill and decode share the same workers
+    // Estimate split based on total compute time
+    const totalPrefillMs = runs.reduce((sum, run) => sum + run.prefillBusy, 0);
+    const totalDecodeMs = runs.reduce((sum, run) => sum + run.decodeBusy, 0);
+    const prefillRatio = totalBusy > 0 ? totalPrefillMs / totalBusy : 0.5;
+    
+    // Estimate effective utilization for each phase
+    // (Monolithic doesn't truly separate, but we report implied utilization)
+    const impliedPrefillUtil = prefillRatio * monolithicUtil;
+    const impliedDecodeUtil = (1 - prefillRatio) * monolithicUtil;
     
     return {
       policyName: "monolithic_shared",
@@ -547,12 +573,19 @@ export class EnhancedPDServingSimulator {
         e2eP99: this.percentile(runs.map(r => r.e2e), 99)
       },
       utilization: {
-        prefillUtilization: 0,
-        decodeUtilization: 0,
-        monolithicUtilization: round(util)
+        prefillUtilization: round(impliedPrefillUtil),
+        decodeUtilization: round(impliedDecodeUtil),
+        monolithicUtilization: round(monolithicUtil)
       },
-      queueing: {},
-      notes: ["Baseline: monolithic serving with interference penalty"]
+      queueing: {
+        prefillQueueP90: this.percentile(runs.map(r => r.prefillQueue), 90),
+        decodeQueueP90: 0 // Monolithic doesn't have decode queue between phases
+      },
+      notes: [
+        `Baseline: monolithic serving with interference penalty (avg ${round(avgInterferenceMultiplier)}x)`,
+        `Implied utilization breakdown: prefill=${round(impliedPrefillUtil * 100)}%, decode=${round(impliedDecodeUtil * 100)}%`,
+        `Monolithic constraint: prefill and decode cannot overlap`
+      ]
     };
   }
 
@@ -643,34 +676,11 @@ export class EnhancedPDServingSimulator {
    * Generate synthetic workload for testing.
    */
   generateSyntheticWorkload(requestCount: number, qps: number, config?: { prefillHeavy?: boolean; decodeHeavy?: boolean }): PDWorkloadRequest[] {
-    const interval = qps > 0 ? 1000 / qps : 500;
-    const prefillHeavy = config?.prefillHeavy ?? false;
-    const decodeHeavy = config?.decodeHeavy ?? false;
-    
-    return Array.from({ length: requestCount }, (_, index) => {
-      const phase = index % 5;
-      let prefillTokens: number;
-      let decodeTokens: number;
-      
-      if (prefillHeavy) {
-        prefillTokens = 1200 + phase * 400 + (index % 7) * 100;
-        decodeTokens = 50 + (index % 4) * 30;
-      } else if (decodeHeavy) {
-        prefillTokens = 400 + phase * 100 + (index % 5) * 20;
-        decodeTokens = 200 + (index % 4) * 100 + (phase === 4 ? 150 : 0);
-      } else {
-        prefillTokens = 650 + phase * 280 + (index % 7) * 35;
-        decodeTokens = 70 + (index % 4) * 45 + (phase === 4 ? 120 : 0);
-      }
-      
-      return {
-        id: `synthetic-${index + 1}`,
-        arrivalMs: round(index * interval),
-        prefillTokens,
-        decodeTokens,
-        cacheablePrefixTokens: Math.floor(prefillTokens * (phase <= 2 ? 0.62 : 0.38)),
-        priority: phase === 4 ? "background" : "interactive"
-      };
+    return createWorkload(requestCount, qps, {
+      prefillHeavy: config?.prefillHeavy,
+      decodeHeavy: config?.decodeHeavy,
+      highPriorityRatio: 0.8, // 80% interactive, 20% background (matches original behavior)
+      idPrefix: "synthetic"
     });
   }
 
@@ -719,10 +729,6 @@ export class EnhancedPDServingSimulator {
     const idx = Math.ceil((p / 100) * sorted.length) - 1;
     return round(sorted[Math.max(0, idx)]);
   }
-}
-
-function round(value: number): number {
-  return Math.round(value * 100) / 100;
 }
 
 export const enhancedPDServingSimulator = new EnhancedPDServingSimulator();

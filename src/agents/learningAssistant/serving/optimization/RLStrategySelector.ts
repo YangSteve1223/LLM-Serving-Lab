@@ -9,13 +9,22 @@
  * 
  * Integrates with CacheExperimentRunner for comparative evaluation.
  */
-import type { EvictionStrategy } from "./cache/RadixPrefixCacheManager.ts";
+import type { EvictionStrategy } from "../cache/RadixPrefixCacheManager.ts";
+import { DeterministicRandom } from "../utils/DeterministicRandom.ts";
+import { round } from "../utils/MathUtils.ts";
 
 // ==================== Types ====================
 
 export type SchedulingStrategy = "FCFS" | "SJF" | "SLO_AWARE";
 export type CompressionLevel = "none" | "low" | "high";
 
+// Re-export shared SystemMetricsState type for backward compatibility
+export type { SystemMetricsState } from "../scheduling/SchedulerInterface.ts";
+
+/**
+ * SystemState for RL strategy selection (without sloUrgency).
+ * Uses the shared SystemMetricsState interface.
+ */
 export interface SystemState {
   gpuMemoryPressure: number; // 0-1
   concurrentRequests: number;
@@ -107,11 +116,6 @@ const STATE_BINS = {
 
 // ==================== Helper Functions ====================
 
-function round(value: number, decimals: number = 2): number {
-  const factor = Math.pow(10, decimals);
-  return Math.round(value * factor) / factor;
-}
-
 function discretizeState(state: SystemState): string {
   const bins = STATE_BINS;
   
@@ -162,8 +166,9 @@ export class RLStrategySelector {
   private episodeCount: number;
   private totalExperiences: number;
   private rewardHistory: number[];
+  private rng: DeterministicRandom;
 
-  constructor(config: Partial<RLConfig> = {}) {
+  constructor(config: Partial<RLConfig> = {}, seed?: number) {
     this.config = this.normalizeConfig(config);
     this.qTable = {};
     this.targetQTable = {};
@@ -172,6 +177,7 @@ export class RLStrategySelector {
     this.episodeCount = 0;
     this.totalExperiences = 0;
     this.rewardHistory = [];
+    this.rng = new DeterministicRandom(seed ?? 42);
     
     // Initialize Q-table with action space
     this.initializeQTable();
@@ -231,8 +237,8 @@ export class RLStrategySelector {
     }
     
     // Exploration: random action
-    if (Math.random() < this.epsilon) {
-      const randomAction = ACTION_SPACE[Math.floor(Math.random() * ACTION_SPACE.length)];
+    if (this.rng.random() < this.epsilon) {
+      const randomAction = ACTION_SPACE[this.rng.randomInt(0, ACTION_SPACE.length - 1)];
       return {
         action: randomAction,
         exploration: true,
@@ -362,7 +368,7 @@ export class RLStrategySelector {
     const indices = new Set<number>();
     
     while (indices.size < this.config.batchSize) {
-      const idx = Math.floor(Math.random() * this.replayBuffer.length);
+      const idx = this.rng.randomInt(0, this.replayBuffer.length - 1);
       indices.add(idx);
     }
     
@@ -567,10 +573,10 @@ export async function runRLEpisode(
     
     // Get next state (simplified: small random change)
     const nextState: SystemState = {
-      gpuMemoryPressure: Math.max(0, Math.min(1, state.gpuMemoryPressure + (Math.random() - 0.5) * 0.1)),
-      concurrentRequests: Math.max(0, state.concurrentRequests + Math.floor(Math.random() * 3) - 1),
-      avgPromptLength: Math.max(0, state.avgPromptLength + Math.floor((Math.random() - 0.5) * 100)),
-      cacheHitRate: Math.max(0, Math.min(1, state.cacheHitRate + (Math.random() - 0.5) * 0.1))
+      gpuMemoryPressure: Math.max(0, Math.min(1, state.gpuMemoryPressure + this.rng.randomFloat(-0.05, 0.05))),
+      concurrentRequests: Math.max(0, state.concurrentRequests + this.rng.randomInt(-1, 1)),
+      avgPromptLength: Math.max(0, state.avgPromptLength + this.rng.randomInt(-50, 50)),
+      cacheHitRate: Math.max(0, Math.min(1, state.cacheHitRate + this.rng.randomFloat(-0.05, 0.05)))
     };
     
     const experience: LearningExperience = {
@@ -615,5 +621,5 @@ function calculateSimulatedReward(state: SystemState, action: Action): number {
     reward -= 0.2; // Wasteful compression
   }
   
-  return round(reward + (Math.random() - 0.5) * 0.1, 3); // Add noise
+  return round(reward + deterministicRandomFloat(-0.05, 0.05), 3); // Add noise
 }

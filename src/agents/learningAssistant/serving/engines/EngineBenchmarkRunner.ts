@@ -7,7 +7,7 @@
 import { performance } from "node:perf_hooks";
 import type { ChatMessage } from "../../types.ts";
 import { CacheAwarePromptBuilder } from "../CacheAwarePromptBuilder.ts";
-import { TokenEstimator } from "../TokenEstimator.ts";
+import { exactTokenEstimator } from "../ExactTokenEstimator.ts";
 import type { ServingPhaseTrace } from "../ServingTrace.ts";
 import { diffEngineMetrics, EngineMetricsClient } from "./EngineMetricsClient.ts";
 import type {
@@ -24,6 +24,7 @@ import type {
 } from "./EngineBenchmarkTypes.ts";
 import { StreamingOpenAICompatibleClient } from "./StreamingOpenAICompatibleClient.ts";
 import type { ActualStreamingTrace } from "./StreamingTrace.ts";
+import { round, percentile } from "../utils/MathUtils.ts";
 
 type PolicyRun = {
   request: EngineBenchmarkRequest;
@@ -36,7 +37,7 @@ type PolicyRun = {
 };
 
 export class EngineBenchmarkRunner {
-  private estimator = new TokenEstimator();
+  private estimator = exactTokenEstimator;
   private promptBuilder = new CacheAwarePromptBuilder();
   private metricsClient = new EngineMetricsClient();
 
@@ -64,12 +65,12 @@ export class EngineBenchmarkRunner {
         });
         const prompt = policy === "cache_first" ? plan.canonicalPrompt : applyPolicyToPrompt(basePrompt, policy);
         const tokenAccounting = buildPromptTokenAccounting({
-          originalPromptTokens: this.estimator.estimateTokens(basePrompt),
-          canonicalPromptTokens: this.estimator.estimateTokens(plan.canonicalPrompt),
-          rawPromptTokensSent: this.estimator.estimateTokens(prompt),
+          originalPromptTokens: this.estimator.estimate(basePrompt).tokenCount,
+          canonicalPromptTokens: this.estimator.estimate(plan.canonicalPrompt).tokenCount,
+          rawPromptTokensSent: this.estimator.estimate(prompt).tokenCount,
           stablePrefixTokens: plan.stablePrefixTokens,
           dynamicSuffixTokens: plan.dynamicSuffixTokens,
-          selectedEvidenceTokens: this.estimator.estimateTokens(context.pageText),
+          selectedEvidenceTokens: this.estimator.estimate(context.pageText).tokenCount,
           cacheablePrefixTokensEstimate: plan.cachePrediction.cacheablePrefixTokensEstimate,
           policy
         });
@@ -77,7 +78,7 @@ export class EngineBenchmarkRunner {
           id: `${policy}-${index + 1}`,
           prompt,
           policy,
-          promptTokensEstimate: tokenAccounting.rawPromptTokensSent ?? this.estimator.estimateTokens(prompt),
+          promptTokensEstimate: tokenAccounting.rawPromptTokensSent ?? this.estimator.estimate(prompt).tokenCount,
           stablePrefixTokensEstimate: plan.stablePrefixTokens,
           tokenAccounting,
           expectedOutputTokens: 120
@@ -470,13 +471,6 @@ function meanOrUndefined(values: number[]): number | undefined {
   return values.length ? mean(values) : undefined;
 }
 
-function percentile(values: number[], p: number): number | undefined {
-  if (!values.length) return undefined;
-  const sorted = [...values].sort((a, b) => a - b);
-  const index = Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1);
-  return round(sorted[index]);
-}
-
 function sumDefined(values: Array<number | undefined>): number | undefined {
   const defined = values.filter(isNumber);
   if (!defined.length) return undefined;
@@ -485,10 +479,6 @@ function sumDefined(values: Array<number | undefined>): number | undefined {
 
 function isNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
-}
-
-function round(value: number): number {
-  return Number(value.toFixed(3));
 }
 
 function pct(value: number): string {

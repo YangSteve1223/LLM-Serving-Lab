@@ -12,6 +12,7 @@ import type {
   PrefillChunk
 } from "../ServingTrace.ts";
 import type { CacheAwarePromptPlan } from "../CacheAwarePromptBuilder.ts";
+import { round } from "../utils/MathUtils.ts";
 
 // ==================== Types ====================
 
@@ -26,8 +27,8 @@ export interface CacheEntry {
   lastAccessTime: number;
   flopsEfficiency: number; // FLOPs saved per byte stored
   createdAt: number;
-  courseId?: string; // For course-level cache grouping
-  studentId?: string;
+  tenantId?: string; // For tenant-level cache grouping
+  requestGroupId?: string;
 }
 
 export interface CacheStats {
@@ -75,22 +76,17 @@ export interface RadixTreeConfig {
   kvCacheSizePerTokenMB: number;
   flopsPerToken: number; // FLOPs per token during prefill
   evictionStrategy: EvictionStrategy;
-  enableCoursePooling: boolean;
+  enableGroupPooling: boolean;
 }
 
-export interface CourseCacheGroup {
-  courseId: string;
+export interface RequestGroup {
+  groupId: string;
   entries: Set<string>;
   totalSizeMB: number;
   accessCount: number;
 }
 
 // ==================== Helper Functions ====================
-
-function round(value: number, decimals: number = 2): number {
-  const factor = Math.pow(10, decimals);
-  return Math.round(value * factor) / factor;
-}
 
 function computeFlopsEfficiency(entry: CacheEntry, config: RadixTreeConfig): number {
   // FLOPs saved = prefill FLOPs for cached tokens
@@ -105,7 +101,7 @@ export class RadixTree {
   private root: RadixNode;
   private config: Required<RadixTreeConfig>;
   private entries: Map<string, CacheEntry>;
-  private courseGroups: Map<string, CourseCacheGroup>;
+  private requestGroups: Map<string, RequestGroup>;
 
   constructor(config: RadixTreeConfig) {
     this.config = {
@@ -113,7 +109,7 @@ export class RadixTree {
       kvCacheSizePerTokenMB: config.kvCacheSizePerTokenMB ?? 0.64,
       flopsPerToken: config.flopsPerToken ?? 1e6,
       evictionStrategy: config.evictionStrategy ?? "LRU",
-      enableCoursePooling: config.enableCoursePooling ?? true
+      enableGroupPooling: config.enableGroupPooling ?? true
     };
     this.root = this.createNode();
     this.entries = new Map();
@@ -132,7 +128,7 @@ export class RadixTree {
   /**
    * Insert a token sequence into the radix tree.
    */
-  insert(tokens: number[], courseId?: string, studentId?: string): CacheEntry {
+  insert(tokens: number[], tenantId?: string, requestGroupId?: string): CacheEntry {
     const key = this.hashTokens(tokens);
     const existing = this.entries.get(key);
     if (existing) {
@@ -166,16 +162,16 @@ export class RadixTree {
       lastAccessTime: Date.now(),
       flopsEfficiency: 0,
       createdAt: Date.now(),
-      courseId,
-      studentId
+      tenantId,
+      requestGroupId
     };
     entry.flopsEfficiency = computeFlopsEfficiency(entry, this.config);
 
     this.entries.set(key, entry);
 
-    // Update course groups if enabled
-    if (this.config.enableCoursePooling && courseId) {
-      this.addToCourseGroup(courseId, key);
+    // Update group pools if enabled
+    if (this.config.enableGroupPooling && tenantId) {
+      this.addToRequestGroup(tenantId, key);
     }
 
     return entry;
@@ -234,10 +230,10 @@ export class RadixTree {
   }
 
   /**
-   * Get all entries for a course (for course-level pooling).
+   * Get all entries for a group (for group-level pooling).
    */
-  getCourseEntries(courseId: string): CacheEntry[] {
-    const group = this.courseGroups.get(courseId);
+  getGroupEntries(groupId: string): CacheEntry[] {
+    const group = this.requestGroups.get(groupId);
     if (!group) return [];
 
     return Array.from(group.entries)
@@ -285,9 +281,9 @@ export class RadixTree {
     const entry = this.entries.get(key);
     if (!entry) return;
 
-    // Remove from course group
-    if (entry.courseId) {
-      this.removeFromCourseGroup(entry.courseId, key);
+    // Remove from group pool
+    if (entry.tenantId) {
+      this.removeFromRequestGroup(entry.tenantId, key);
     }
 
     this.entries.delete(key);
@@ -306,16 +302,16 @@ export class RadixTree {
     }
   }
 
-  private addToCourseGroup(courseId: string, key: string): void {
-    if (!this.courseGroups.has(courseId)) {
-      this.courseGroups.set(courseId, {
-        courseId,
+  private addToRequestGroup(groupId: string, key: string): void {
+    if (!this.requestGroups.has(groupId)) {
+      this.requestGroups.set(groupId, {
+        groupId,
         entries: new Set(),
         totalSizeMB: 0,
         accessCount: 0
       });
     }
-    const group = this.courseGroups.get(courseId)!;
+    const group = this.requestGroups.get(groupId)!;
     group.entries.add(key);
     const entry = this.entries.get(key);
     if (entry) {
@@ -324,8 +320,8 @@ export class RadixTree {
     }
   }
 
-  private removeFromCourseGroup(courseId: string, key: string): void {
-    const group = this.courseGroups.get(courseId);
+  private removeFromRequestGroup(groupId: string, key: string): void {
+    const group = this.requestGroups.get(groupId);
     if (!group) return;
     group.entries.delete(key);
   }
@@ -384,7 +380,7 @@ export class RadixPrefixCacheManager {
       kvCacheSizePerTokenMB: config.kvCacheSizePerTokenMB ?? 0.64,
       flopsPerToken: config.flopsPerToken ?? 1e6,
       evictionStrategy: config.evictionStrategy ?? "LRU",
-      enableCoursePooling: config.enableCoursePooling ?? true
+      enableGroupPooling: config.enableGroupPooling ?? true
     };
     this.tree = new RadixTree(this.config);
     this.resetStats();
@@ -447,7 +443,7 @@ export class RadixPrefixCacheManager {
   /**
    * Cache a completed request's prefix for future reuse.
    */
-  cacheRequest(request: EnhancedPDWorkloadRequest, courseId?: string, studentId?: string): void {
+  cacheRequest(request: EnhancedPDWorkloadRequest, tenantId?: string, requestGroupId?: string): void {
     const tokens = this.generateTokenSequence(request);
     const cacheableTokens = Math.min(
       tokens.length,
@@ -455,30 +451,30 @@ export class RadixPrefixCacheManager {
     );
 
     if (cacheableTokens > 0) {
-      this.tree.insert(tokens.slice(0, cacheableTokens), courseId, studentId);
+      this.tree.insert(tokens.slice(0, cacheableTokens), tenantId, requestGroupId);
     }
   }
 
   /**
    * Cache a prompt plan's stable prefix.
    */
-  cacheStablePrefix(plan: CacheAwarePromptPlan, courseId?: string): void {
+  cacheStablePrefix(plan: CacheAwarePromptPlan, tenantId?: string): void {
     // Extract tokens from the canonical prompt (simplified)
     const tokens = this.tokensFromText(plan.canonicalPrompt);
     if (tokens.length > 0) {
-      this.tree.insert(tokens.slice(0, plan.stablePrefixTokens), courseId);
+      this.tree.insert(tokens.slice(0, plan.stablePrefixTokens), tenantId);
     }
   }
 
   /**
-   * Get course-level cache pool statistics.
+   * Get group-level cache pool statistics.
    */
-  getCoursePoolStats(courseId: string): {
+  getGroupPoolStats(groupId: string): {
     entryCount: number;
     totalSizeMB: number;
     accessCount: number;
   } {
-    const entries = this.tree.getCourseEntries(courseId);
+    const entries = this.tree.getGroupEntries(groupId);
     return {
       entryCount: entries.length,
       totalSizeMB: entries.reduce((sum, e) => sum + e.sizeBytes, 0) / (1024 * 1024),

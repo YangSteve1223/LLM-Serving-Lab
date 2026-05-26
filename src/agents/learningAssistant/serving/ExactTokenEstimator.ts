@@ -14,7 +14,6 @@ import type {
   TokenEstimateComparison,
   ExactTokenEstimatorConfig
 } from "./ServingTrace.ts";
-import { TokenEstimator } from "./TokenEstimator.ts";
 
 // Common BPE merges for English text (simplified GPT-2 style vocab)
 const COMMON_BPE_MERGES = [
@@ -314,15 +313,28 @@ export class BPETokenizer {
 }
 
 /**
+ * Simple heuristic token estimator (inlined, replacing deleted TokenEstimator).
+ */
+function estimateTokensHeuristic(text: string | undefined): number {
+  if (!text) return 0;
+  // Count words + special token approximation
+  const words = text.trim().split(/\s+/).filter(w => w.length > 0);
+  const wordCount = words.length;
+  // Average ~4 chars per English token, 1.5 per Chinese char
+  const chineseChars = (text.match(/[\u4e00-\u9fff]/g) || []).length;
+  const englishChars = text.length - chineseChars;
+  const tokens = Math.ceil(wordCount * 1.3) + Math.ceil(chineseChars * 1.5) + Math.ceil(englishChars / 4);
+  return Math.max(1, Math.ceil(tokens));
+}
+
+/**
  * Exact Token Estimator with multiple estimation methods.
  */
 export class ExactTokenEstimator {
-  private heuristicEstimator: TokenEstimator;
   private bpeTokenizer: BPETokenizer;
   private config: ExactTokenEstimatorConfig;
   
   constructor(config: ExactTokenEstimatorConfig = { estimatorType: "heuristic" }) {
-    this.heuristicEstimator = new TokenEstimator();
     this.bpeTokenizer = new BPETokenizer(5000);
     this.config = {
       estimatorType: config.estimatorType ?? "heuristic",
@@ -352,11 +364,11 @@ export class ExactTokenEstimator {
    * Estimate using heuristic method.
    */
   private estimateHeuristic(text: string | undefined): TokenEstimateResult {
-    const tokenCount = this.heuristicEstimator.estimateTokens(text);
+    const tokenCount = estimateTokensHeuristic(text);
     return {
       estimatorType: "heuristic",
       tokenCount,
-      confidence: 0.6, // Lower confidence for heuristic
+      confidence: 0.6,
       details: {
         numOperations: text ? text.length : 0
       }

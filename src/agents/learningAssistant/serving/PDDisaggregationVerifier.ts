@@ -9,6 +9,7 @@
  * - End-to-end verification against simulator predictions
  */
 import type { LatencyMeasurement, ScenarioResult, CalibrationResult } from "../benchmark/DeepSeekLatencyProber.ts";
+import { SIMULATION_CONSTANTS } from "./constants.ts";
 
 export interface PDVerificationScenario {
   name: string;
@@ -194,8 +195,8 @@ export class PDDisaggregationVerifier {
     const results: PDBatchResult[] = [];
     const inputTokens = 512;
     const outputTokens = 128;
-    const basePrefillMs = inputTokens * 0.18 + 25;
-    const baseDecodeMs = outputTokens * 18;
+    const basePrefillMs = inputTokens * SIMULATION_CONSTANTS.PREFILL_MS_PER_TOKEN + SIMULATION_CONSTANTS.BASE_PREFILL_OVERHEAD_MS;
+    const baseDecodeMs = outputTokens * SIMULATION_CONSTANTS.DECODE_MS_PER_TOKEN;
 
     for (const batchSize of batchSizes) {
       // Simulate monolithic batch interference
@@ -281,8 +282,8 @@ export class PDDisaggregationVerifier {
    * Simulate monolithic serving timing.
    */
   private simulateMonolithic(scenario: PDVerificationScenario): PDPhaseTiming {
-    const prefillMs = scenario.inputTokens * 0.18 + 25;
-    const decodeMs = scenario.outputTokens * 18;
+    const prefillMs = scenario.inputTokens * SIMULATION_CONSTANTS.PREFILL_MS_PER_TOKEN + SIMULATION_CONSTANTS.BASE_PREFILL_OVERHEAD_MS;
+    const decodeMs = scenario.outputTokens * SIMULATION_CONSTANTS.DECODE_MS_PER_TOKEN;
     const e2eMs = prefillMs + decodeMs;
 
     return {

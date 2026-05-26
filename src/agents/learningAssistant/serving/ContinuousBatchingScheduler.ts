@@ -6,7 +6,7 @@
  * - Dynamic request management (add/remove requests from batch)
  * - SLO-aware scheduling with TTFT/TPOT constraints
  * - Multiple scheduling policies: FCFS, SJF (Shortest Job First), SLO-aware
- * - Integration with PDServingSimulator for validation
+ * - Integration with EnhancedPDServingSimulator for validation
  */
 import type {
   PDWorkloadRequest,
@@ -17,6 +17,8 @@ import type {
   ServingSLO
 } from "./ServingTrace.ts";
 import { EnhancedPDServingSimulator } from "./EnhancedPDServingSimulator.ts";
+import { generateSyntheticWorkload } from "./workload/ServingWorkloadModel.ts";
+import { SIMULATION_CONSTANTS } from "./constants.ts";
 
 export type ContinuousBatchingPolicy = "fcfs" | "sjf" | "slo_aware";
 
@@ -278,20 +280,20 @@ export class ContinuousBatchingScheduler {
           
           // TTFT risk (waiting for prefill to complete)
           if (remainingPrefill > 0) {
-            const estimatedTTFT = remainingPrefill * 0.18 + 25; // Simplified estimate
+            const estimatedTTFT = remainingPrefill * SIMULATION_CONSTANTS.PREFILL_MS_PER_TOKEN + SIMULATION_CONSTANTS.BASE_PREFILL_OVERHEAD_MS; // Simplified estimate
             const risk = (waitingTime + estimatedTTFT) / (config.slo.ttftMs ?? 1000);
             sloRisk = Math.max(sloRisk, risk);
           }
           
           // TPOT risk (decode performance)
           if (remainingDecode > 0) {
-            const estimatedTPOT = 18; // Simplified
+            const estimatedTPOT = SIMULATION_CONSTANTS.DECODE_MS_PER_TOKEN; // Simplified
             const risk = estimatedTPOT / (config.slo.tpotMs ?? 100);
             sloRisk = Math.max(sloRisk, risk);
           }
           
           // E2E risk
-          const estimatedE2E = remainingPrefill * 0.18 + remainingDecode * 18;
+          const estimatedE2E = remainingPrefill * SIMULATION_CONSTANTS.PREFILL_MS_PER_TOKEN + remainingDecode * SIMULATION_CONSTANTS.DECODE_MS_PER_TOKEN;
           const risk = (waitingTime + estimatedE2E) / (config.slo.e2eMs ?? 10000);
           sloRisk = Math.max(sloRisk, risk);
           
@@ -454,35 +456,11 @@ export class ContinuousBatchingScheduler {
       highPriority?: number;
     }
   ): PDWorkloadRequest[] {
-    const interval = qps > 0 ? 1000 / qps : 500;
-    const highPriorityRatio = options?.highPriority ?? 0.3;
-    
-    return Array.from({ length: requestCount }, (_, index) => {
-      const phase = index % 5;
-      let prefillTokens: number;
-      let decodeTokens: number;
-      
-      if (options?.prefillHeavy) {
-        prefillTokens = 1500 + phase * 500 + (index % 7) * 100;
-        decodeTokens = 50 + (index % 4) * 30;
-      } else if (options?.decodeHeavy) {
-        prefillTokens = 400 + phase * 100 + (index % 5) * 20;
-        decodeTokens = 250 + (index % 4) * 100 + (phase === 4 ? 150 : 0);
-      } else {
-        prefillTokens = 650 + phase * 280 + (index % 7) * 35;
-        decodeTokens = 70 + (index % 4) * 45 + (phase === 4 ? 120 : 0);
-      }
-      
-      const isHighPriority = index < Math.floor(requestCount * highPriorityRatio);
-      
-      return {
-        id: `cb-req-${index + 1}`,
-        arrivalMs: Math.round(index * interval),
-        prefillTokens,
-        decodeTokens,
-        cacheablePrefixTokens: Math.floor(prefillTokens * (phase <= 2 ? 0.62 : 0.38)),
-        priority: isHighPriority ? "interactive" : "background"
-      };
+    return generateSyntheticWorkload(requestCount, qps, {
+      prefillHeavy: options?.prefillHeavy,
+      decodeHeavy: options?.decodeHeavy,
+      highPriorityRatio: options?.highPriority ?? 0.3,
+      idPrefix: "cb-req"
     });
   }
   

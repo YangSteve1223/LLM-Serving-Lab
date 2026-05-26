@@ -19,16 +19,17 @@ import type {
   WorkloadConfig, 
   SyntheticRequest,
   WorkloadAnalysis
-} from "../workload/EducationalWorkloadModel.ts";
-import { EducationalWorkloadModel, createTypicalWorkload } from "../workload/EducationalWorkloadModel.ts";
+} from "../workload/ServingWorkloadModel.ts";
+import { ServingWorkloadModel, createTypicalWorkload } from "../workload/ServingWorkloadModel.ts";
+import { round, percentile } from "../utils/MathUtils.ts";
 
 // ==================== Types ====================
 
 export type ExperimentType = 
   | "cache_on_off"
   | "eviction_strategies"
-  | "student_scaling"
-  | "course_pooling"
+  | "tenant_scaling"
+  | "group_pooling"
   | "hierarchical_tiers";
 
 export interface ExperimentConfig {
@@ -38,7 +39,7 @@ export interface ExperimentConfig {
   cacheConfig: {
     maxMemoryMB: number;
     evictionStrategies: EvictionStrategy[];
-    enableCoursePooling: boolean;
+    enableGroupPooling: boolean;
   };
   simulatorConfig: {
     prefillBaseMs: number;
@@ -117,11 +118,6 @@ export interface ExperimentReport {
 
 // ==================== Helper Functions ====================
 
-function round(value: number, decimals: number = 2): number {
-  const factor = Math.pow(10, decimals);
-  return Math.round(value * factor) / factor;
-}
-
 function mean(values: number[]): number {
   return values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
 }
@@ -130,12 +126,6 @@ function stdDev(values: number[]): number {
   if (values.length === 0) return 0;
   const m = mean(values);
   return Math.sqrt(values.reduce((sum, v) => sum + Math.pow(v - m, 2), 0) / values.length);
-}
-
-function percentile(values: number[], p: number): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const idx = Math.ceil((p / 100) * sorted.length) - 1;
-  return sorted[Math.max(0, idx)];
 }
 
 function confidenceInterval95(values: number[]): { lower: number; upper: number } {
@@ -201,7 +191,7 @@ export class CacheExperimentRunner {
         avgConcurrentUsers: 10,
         peakConcurrentUsers: 40,
         avgDialogueTurns: 8,
-        tidalStrength: 0.5,
+        loadFluctuation: 0.5,
         prefixReuseRate: 0.35,
         courseMaterialTokens: 2048,
         systemPromptTokens: 512
@@ -209,7 +199,7 @@ export class CacheExperimentRunner {
       cacheConfig: {
         maxMemoryMB: partial.cacheConfig?.maxMemoryMB ?? 1024,
         evictionStrategies: partial.cacheConfig?.evictionStrategies ?? ["LRU", "LFU", "FLOP_AWARE"],
-        enableCoursePooling: partial.cacheConfig?.enableCoursePooling ?? true
+        enableGroupPooling: partial.cacheConfig?.enableGroupPooling ?? true
       },
       simulatorConfig: partial.simulatorConfig ?? {
         prefillBaseMs: 25,
@@ -230,7 +220,7 @@ export class CacheExperimentRunner {
   runExperiment(
     evictionStrategy: EvictionStrategy = "LRU",
     enableCache: boolean = true,
-    enableCoursePooling: boolean = true
+    enableGroupPooling: boolean = true
   ): ExperimentMetrics {
     const workload = createTypicalWorkload();
     const trace = workload.generateTrace(this.config.traceDurationMinutes);
@@ -240,7 +230,7 @@ export class CacheExperimentRunner {
     const cache = new RadixPrefixCacheManager({
       maxMemoryMB: this.config.cacheConfig.maxMemoryMB,
       evictionStrategy,
-      enableCoursePooling
+      enableGroupPooling
     });
 
     const simConfig = this.config.simulatorConfig;
@@ -350,7 +340,7 @@ export class CacheExperimentRunner {
 
     for (const strategy of this.config.cacheConfig.evictionStrategies) {
       notes.push(`Running experiment with ${strategy} eviction strategy...`);
-      const metrics = this.runExperiment(strategy, true, this.config.cacheConfig.enableCoursePooling);
+      const metrics = this.runExperiment(strategy, true, this.config.cacheConfig.enableGroupPooling);
 
       // Calculate effect size compared to baseline
       metrics.effectSize = round(cohensD(metrics.rawTTFT, baselineMetrics.rawTTFT), 4);
@@ -366,7 +356,7 @@ export class CacheExperimentRunner {
     const studentScaleMetrics: Record<number, ExperimentMetrics> = {};
     for (const numStudents of [10, 50, 100, 200]) {
       notes.push(`Running student scaling experiment with ${numStudents} students...`);
-      const scaledWorkload = new EducationalWorkloadModel({
+      const scaledWorkload = new ServingWorkloadModel({
         ...this.config.workloadConfig,
         numStudents
       });
@@ -743,7 +733,7 @@ export function createComprehensiveExperiment(): CacheExperimentRunner {
     cacheConfig: {
       maxMemoryMB: 2048,
       evictionStrategies: ["LRU", "LFU", "FLOP_AWARE"],
-      enableCoursePooling: true
+      enableGroupPooling: true
     },
     workloadConfig: {
       numStudents: 100,
@@ -751,7 +741,7 @@ export function createComprehensiveExperiment(): CacheExperimentRunner {
       avgConcurrentUsers: 25,
       peakConcurrentUsers: 100,
       avgDialogueTurns: 10,
-      tidalStrength: 0.7,
+      loadFluctuation: 0.7,
       prefixReuseRate: 0.4,
       courseMaterialTokens: 2048,
       systemPromptTokens: 512

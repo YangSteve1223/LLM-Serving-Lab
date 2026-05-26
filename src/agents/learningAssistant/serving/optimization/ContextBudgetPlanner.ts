@@ -9,6 +9,7 @@
  * Integrates with CacheAwarePromptBuilder for budget-aware prompt construction.
  */
 import type { PromptComponent } from "./CacheAwarePromptBuilder.ts";
+import { round } from "../utils/MathUtils.ts";
 
 // ==================== Types ====================
 
@@ -39,6 +40,13 @@ export type BudgetAllocation = {
   criticalPreserved: boolean;
 };
 
+// Re-export shared SystemMetricsState type for backward compatibility
+export type { SystemMetricsState } from "../scheduling/SchedulerInterface.ts";
+
+/**
+ * SystemState with sloUrgency (extends SystemMetricsState).
+ * Used in ContextBudgetPlanner for compression decisions.
+ */
 export type SystemState = {
   gpuMemoryPressure: number; // 0-1, higher = more pressure
   concurrentRequests: number;
@@ -89,11 +97,6 @@ const DEFAULT_CRITICAL_PATTERNS: RegExp[] = [
 ];
 
 // ==================== Helper Functions ====================
-
-function round(value: number, decimals: number = 2): number {
-  const factor = Math.pow(10, decimals);
-  return Math.round(value * factor) / factor;
-}
 
 function calculateTokenSelfInformation(
   token: string,

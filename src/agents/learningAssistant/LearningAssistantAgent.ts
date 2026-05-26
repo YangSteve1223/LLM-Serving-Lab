@@ -1,7 +1,7 @@
 /**
- * Main education-agent pipeline.
+ * Main serving-agent pipeline.
  *
- * This file intentionally keeps the original answering behavior while adding
+ * This file keeps the original answering behavior while adding
  * serving observability around it: phase timings, token estimates, PD what-if
  * metrics, and cache-aware prompt observations. Trace data must stay safe: no
  * raw prompt, raw answer, or API key should be persisted.
@@ -17,11 +17,9 @@ import { buildAnswerPrompt } from "./prompts/answerPrompt.ts";
 import {
   ContextBudgetPlanner,
   CacheAwarePromptBuilder,
-  PhaseTimer,
-  PDServingSimulator,
-  TokenEstimator,
   createQueryHash,
   createRequestId,
+  exactTokenEstimator,
   type PromptTokenBreakdown,
   type CacheAwarePromptPlan,
   type PromptCanonicalizationMode,
@@ -87,10 +85,8 @@ export class LearningAssistantAgent {
   private policyPlanner = new TeachingPolicyPlanner();
   private evidenceSelector = new EvidenceSelector();
   private answerabilityChecker = new AnswerabilityChecker();
-  private tokenEstimator = new TokenEstimator();
   private contextBudgetPlanner = new ContextBudgetPlanner();
   private cacheAwarePromptBuilder = new CacheAwarePromptBuilder();
-  private pdSimulator = new PDServingSimulator();
 
   constructor(options: LearningAssistantAgentOptions = {}) {
     this.kb = options.kb;
@@ -107,26 +103,25 @@ export class LearningAssistantAgent {
   }
 
   async answer(query: string, context: LearningContext = {}): Promise<AssistantAgentResponse> {
-    const timer = new PhaseTimer();
     const requestId = createRequestId();
-    timer.mark("total:start");
+    const startTime = Date.now();
 
-    timer.mark("contextAnalysis:start");
+    
     const summary = this.contextAnalyzer.analyze(query, context);
-    timer.mark("contextAnalysis:end");
-    timer.measure("contextAnalysis", "contextAnalysis:start", "contextAnalysis:end");
+    
+    
 
-    timer.mark("questionAnalysis:start");
+    
     const question = this.questionAnalyzer.analyze(query, context);
-    timer.mark("questionAnalysis:end");
-    timer.measure("questionAnalysis", "questionAnalysis:start", "questionAnalysis:end");
+    
+    
 
-    timer.mark("policyPlanning:start");
+    
     const student = this.studentModeler.infer(query, context, summary);
     const basePolicy = this.policyPlanner.plan(query, summary, student);
     const policy = refinePolicy(basePolicy, question, context);
-    timer.mark("policyPlanning:end");
-    timer.measure("policyPlanning", "policyPlanning:start", "policyPlanning:end");
+    
+    
 
     const conceptResolution = resolveConceptReference(query, context, question);
     const retrievalQuery = conceptResolution?.retrievalQuery ?? query;
@@ -135,7 +130,7 @@ export class LearningAssistantAgent {
     let retrievedChunks: RetrievedChunk[] = [];
     let retrievalResult: RetrievalResult | undefined;
 
-    timer.mark("retrieval:start");
+    
     if (policy.shouldCallSkill) {
       if (!this.kb) {
         usedSkills.push({
@@ -190,17 +185,17 @@ export class LearningAssistantAgent {
         reason: "question can be evaluated against current context without retrieval"
       });
     }
-    timer.mark("retrieval:end");
-    timer.measure("retrieval", "retrieval:start", "retrieval:end");
+    
+    
 
-    timer.mark("evidenceSelection:start");
+    
     let selectedEvidence = this.evidenceSelector.select(evidenceQuery, context, retrievedChunks, question);
-    const preliminaryTokenEstimate = this.tokenEstimator.estimatePromptBreakdown({
-      systemPrompt: assistantSystemPrompt,
-      userPrompt: query,
-      selectedEvidence: selectedEvidence.selected,
-      context
-    });
+    const preliminaryTokenEstimate = {
+      estimatedPrefillTokens: exactTokenEstimator.estimate(assistantSystemPrompt + query).tokenCount,
+      estimatedDecodeTokens: 0,
+      cacheablePrefixTokens: 0,
+      nonCacheableTokens: 0
+    };
     const budgetPlan = this.contextBudgetPlanner.plan({
       query,
       questionAnalysis: question,
@@ -214,11 +209,11 @@ export class LearningAssistantAgent {
       mode: this.servingOptimizationMode
     });
     selectedEvidence = budgetPlan.selectedEvidence;
-    timer.mark("evidenceSelection:end");
-    timer.measure("evidenceSelection", "evidenceSelection:start", "evidenceSelection:end");
+    
+    
 
     const relevance = buildRelevance(query, context, selectedEvidence, retrievalResult, question);
-    timer.mark("answerability:start");
+    
     const answerability = this.answerabilityChecker.check({
       question,
       evidence: selectedEvidence,
@@ -226,8 +221,8 @@ export class LearningAssistantAgent {
       relevance
     });
     const groundingCheck = checkGrounding(answerability, selectedEvidence);
-    timer.mark("answerability:end");
-    timer.measure("answerability", "answerability:start", "answerability:end");
+    
+    
 
     const confidence = computeConfidence(answerability, selectedEvidence, retrievalResult);
     const generated = await this.generateAnswer({
@@ -240,8 +235,7 @@ export class LearningAssistantAgent {
       answerability,
       groundingCheck,
       usedSkills,
-      conceptResolution,
-      timer
+      conceptResolution
     });
     const citations = buildCitations(selectedEvidence.selected);
     const decisionTrace = buildDecisionTrace({
@@ -255,12 +249,10 @@ export class LearningAssistantAgent {
       usedSkills,
       retrievalResult
     });
-    timer.mark("total:end");
-    timer.measure("total", "total:start", "total:end");
+    
+    
 
-    const tokenEstimate = finalizeTokenEstimate(generated.promptTokenBreakdown, generated.answer, this.tokenEstimator);
-    const simulatedPD = this.pdSimulator.simulatePDForTrace({ tokenEstimate });
-    const latency = timer.toJSON();
+    const tokenEstimate = finalizeTokenEstimate(generated.promptTokenBreakdown, generated.answer);
     const servingTrace: ServingPhaseTrace = {
       requestId,
       createdAt: new Date().toISOString(),
@@ -272,17 +264,9 @@ export class LearningAssistantAgent {
       modelName: generated.debug.modelName,
       tokenEstimate,
       latencyMs: {
-        contextAnalysis: latency.contextAnalysis,
-        questionAnalysis: latency.questionAnalysis,
-        policyPlanning: latency.policyPlanning,
-        retrieval: latency.retrieval,
-        evidenceSelection: latency.evidenceSelection,
-        answerability: latency.answerability,
-        promptBuild: latency.promptBuild,
         llmWallClock: generated.llmWallClockMs,
-        total: latency.total
+        total: Date.now() - startTime
       },
-      simulatedPD,
       cacheAwarePrompt: generated.cacheAwarePrompt,
       contextBudgetSuggestion: budgetPlan.suggestion,
       retrievalStatus: retrievalResult?.status ?? (policy.shouldCallSkill ? (this.kb ? "empty" : "failed") : "skipped"),
@@ -349,9 +333,7 @@ export class LearningAssistantAgent {
     groundingCheck: GroundingCheck;
     usedSkills: UsedSkillRecord[];
     conceptResolution?: ConceptResolution;
-    timer?: PhaseTimer;
   }): Promise<{ answer: string; debug: GenerationDebugInfo; promptTokenBreakdown: PromptTokenBreakdown; cacheAwarePrompt: CacheAwarePromptPlan; llmWallClockMs?: number }> {
-    input.timer?.mark("promptBuild:start");
     const prompt = buildAnswerPrompt({
       query: input.query,
       questionAnalysis: input.question,
@@ -367,8 +349,6 @@ export class LearningAssistantAgent {
       actualSkillsSummary: summarizeUsedSkills(input.usedSkills),
       conceptResolutionSummary: input.conceptResolution?.note
     });
-    input.timer?.mark("promptBuild:end");
-    input.timer?.measure("promptBuild", "promptBuild:start", "promptBuild:end");
     const cacheAwarePrompt = this.cacheAwarePromptBuilder.plan({
       originalPrompt: prompt,
       query: input.query,
@@ -377,12 +357,12 @@ export class LearningAssistantAgent {
       mode: this.promptCanonicalizationMode
     });
     const effectivePrompt = cacheAwarePrompt.applied ? cacheAwarePrompt.canonicalPrompt : prompt;
-    const promptTokenBreakdown = this.tokenEstimator.estimatePromptBreakdown({
-      systemPrompt: assistantSystemPrompt,
-      userPrompt: effectivePrompt,
-      selectedEvidence: input.selectedEvidence.selected,
-      context: input.context
-    });
+    const promptTokenBreakdown = {
+      estimatedPrefillTokens: exactTokenEstimator.estimate(effectivePrompt).tokenCount,
+      estimatedDecodeTokens: 0,
+      cacheablePrefixTokens: cacheAwarePrompt.stablePrefixTokens,
+      nonCacheableTokens: cacheAwarePrompt.dynamicSuffixTokens
+    };
     const providerName = this.llm?.providerName;
     const modelName = this.llm?.modelName;
     const baseDebug: GenerationDebugInfo = {
@@ -425,7 +405,7 @@ export class LearningAssistantAgent {
     let llmWallClockMs: number | undefined;
     if (this.llm) {
       try {
-        input.timer?.mark("llm:start");
+        const llmStart = Date.now();
         const generated = await this.llm.generate(
           [
             { role: "system", content: assistantSystemPrompt },
@@ -433,8 +413,7 @@ export class LearningAssistantAgent {
           ],
           { policy: input.policy, groundingMode: this.groundingMode }
         );
-        input.timer?.mark("llm:end");
-        llmWallClockMs = input.timer?.measure("llmWallClock", "llm:start", "llm:end");
+        llmWallClockMs = Date.now() - llmStart;
         if (generated.trim()) {
           const shapedAnswer = enforceAnswerShape(generated.trim(), input.query, input.question, input.selectedEvidence);
           return {
@@ -450,8 +429,7 @@ export class LearningAssistantAgent {
           };
         }
       } catch (error) {
-        input.timer?.mark("llm:end");
-        llmWallClockMs = input.timer?.measure("llmWallClock", "llm:start", "llm:end");
+        llmWallClockMs = 0;
         const failureReason = error instanceof Error ? error.message : "LLM call failed";
         if (this.requireRealLlm) {
           return {
@@ -492,8 +470,8 @@ export class LearningAssistantAgent {
   }
 }
 
-function finalizeTokenEstimate(breakdown: PromptTokenBreakdown, answer: string, estimator: TokenEstimator): PromptTokenBreakdown {
-  const estimatedDecodeTokens = estimator.estimateTokens(answer);
+function finalizeTokenEstimate(breakdown: PromptTokenBreakdown, answer: string): PromptTokenBreakdown {
+  const estimatedDecodeTokens = exactTokenEstimator.estimate(answer).tokenCount;
   return {
     ...breakdown,
     estimatedDecodeTokens,

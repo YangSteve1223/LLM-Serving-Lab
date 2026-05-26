@@ -9,6 +9,7 @@
  * Supports prefetch strategies, write policies, and migration modeling.
  */
 import { createHash } from "node:crypto";
+import { round } from "../utils/MathUtils.ts";
 
 // ==================== Types ====================
 
@@ -29,8 +30,8 @@ export interface TierConfig {
 export interface KVCacheEntry {
   key: string;
   requestId: string;
-  courseId?: string;
-  studentId?: string;
+  tenantId?: string;
+  requestGroupId?: string;
   tokens: number[];
   layers: number;
   sizeBytes: number;
@@ -83,8 +84,8 @@ export interface CacheRequest {
   requestId: string;
   tokens: number;
   layers: number;
-  courseId?: string;
-  studentId?: string;
+  tenantId?: string;
+  requestGroupId?: string;
   priority?: "high" | "normal" | "low";
 }
 
@@ -134,11 +135,6 @@ export const DEFAULT_WRITE_POLICY: WritePolicy = "write_back";
 
 // ==================== Helper Functions ====================
 
-function round(value: number, decimals: number = 2): number {
-  const factor = Math.pow(10, decimals);
-  return Math.round(value * factor) / factor;
-}
-
 function hashKey(...parts: string[]): string {
   return createHash("sha256").update(parts.join(":")).digest("hex").slice(0, 16);
 }
@@ -185,10 +181,10 @@ export class HierarchicalKVCache {
    */
   write(request: CacheRequest): void {
     const entry: KVCacheEntry = {
-      key: request.key || hashKey(request.requestId, request.courseId || ""),
+      key: request.key || hashKey(request.requestId, request.tenantId || ""),
       requestId: request.requestId,
-      courseId: request.courseId,
-      studentId: request.studentId,
+      tenantId: request.tenantId,
+      requestGroupId: request.requestGroupId,
       tokens: Array(request.tokens).fill(0).map((_, i) => i),
       layers: request.layers,
       sizeBytes: this.estimateSize(request.tokens, request.layers),

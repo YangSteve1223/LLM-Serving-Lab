@@ -8,6 +8,7 @@ import { RadixTree } from "../cache/RadixPrefixCacheManager.ts";
 import { HashBasedPrefixCache } from "./HashBasedPrefixCache.ts";
 import { SGLangRadixAttentionSimulator, SGLangSchedulerAdapter } from "./SGLangRadixAttentionSimulator.ts";
 import type { PDWorkloadRequest } from "../ServingTrace.ts";
+import { DeterministicRandom } from "../utils/DeterministicRandom.ts";
 
 export interface BenchmarkConfig {
   numRequests: number;
@@ -58,8 +59,9 @@ export interface BenchmarkResult {
 export class AlignmentBenchmark {
   private config: BenchmarkConfig;
   private workload: PDWorkloadRequest[];
+  private rng: DeterministicRandom;
 
-  constructor(config: Partial<BenchmarkConfig> = {}) {
+  constructor(config: Partial<BenchmarkConfig> = {}, seed?: number) {
     this.config = {
       numRequests: config.numRequests ?? 100,
       avgPrefillTokens: config.avgPrefillTokens ?? 512,
@@ -67,25 +69,72 @@ export class AlignmentBenchmark {
       numRuns: config.numRuns ?? 3,
       enableDetailedMetrics: config.enableDetailedMetrics ?? false
     };
+    this.rng = new DeterministicRandom(seed ?? 42);
     
     this.workload = this.generateWorkload();
   }
 
   /**
+   * Beta distribution sample using gamma variates.
+   * Beta(2, 5) gives a distribution skewed toward lower values (0.1-0.5 range)
+   * which better models realistic prefix overlap patterns.
+   */
+  private betaSample(alpha: number, beta: number): number {
+    // Generate gamma variates using Marsaglia and Tsang's method
+    const gammaSample = (shape: number): number => {
+      if (shape >= 1) {
+        const d = shape - 1 / 3;
+        const c = 1 / Math.sqrt(9 * d);
+        while (true) {
+          let x: number, v: number;
+          do {
+            x = this.normalSample();
+            v = 1 + c * x;
+          } while (v <= 0);
+          v = v * v * v;
+          const u = this.rng.random();
+          if (u < 1 - 0.0331 * (x * x) * (x * x)) return d * v;
+          if (Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
+        }
+      } else {
+        return gammaSample(shape + 1) * Math.pow(this.rng.random(), 1 / shape);
+      }
+    };
+
+    const x = gammaSample(alpha);
+    const y = gammaSample(beta);
+    return x / (x + y);
+  }
+
+  /**
+   * Standard normal sample using Box-Muller transform.
+   */
+  private normalSample(): number {
+    const u1 = this.rng.random();
+    const u2 = this.rng.random();
+    return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  }
+
+  /**
    * Generate synthetic workload for benchmarking.
+   * Uses beta distribution for more realistic overlap simulation.
    */
   private generateWorkload(): PDWorkloadRequest[] {
     const workload: PDWorkloadRequest[] = [];
     const baseTokens = Array.from({ length: this.config.avgPrefillTokens }, (_, i) => (i % 100) + 1);
     
     for (let i = 0; i < this.config.numRequests; i++) {
-      // Create requests with varying degrees of prefix overlap
-      const overlapRatio = Math.random();
+      // Use beta distribution for more realistic overlap simulation
+      // Beta(2, 5) gives a distribution skewed toward lower values (0.1-0.5 range)
+      // This models the fact that most requests have partial overlap, not uniform random
+      const overlapRatio = i === 0 ? 0.3 : this.betaSample(2, 5);
       let prefillTokens = this.config.avgPrefillTokens;
       
       if (overlapRatio > 0.7 && i > 0) {
         // High overlap - reuse prefix from previous request
-        prefillTokens = Math.floor(this.config.avgPrefillTokens * (0.5 + Math.random() * 0.5));
+        // Add some variance around 50-100% overlap
+        const overlapAmount = 0.5 + this.rng.random() * 0.5;
+        prefillTokens = Math.floor(this.config.avgPrefillTokens * overlapAmount);
       }
       
       const tokens = baseTokens.slice(0, prefillTokens);
@@ -96,7 +145,7 @@ export class AlignmentBenchmark {
         prefillTokens: tokens.length,
         decodeTokens: this.config.avgDecodeTokens,
         cacheablePrefixTokens: Math.floor(tokens.length * 0.8),
-        priority: Math.random() > 0.9 ? "background" : "interactive"
+        priority: this.rng.random() > 0.9 ? "background" : "interactive"
       });
     }
     

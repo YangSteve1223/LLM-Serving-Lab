@@ -13,6 +13,7 @@
  * - Calibration against simulator predictions
  */
 import { EnhancedPDServingSimulator } from "../EnhancedPDServingSimulator.ts";
+import { DeterministicRandom } from "../utils/DeterministicRandom.ts";
 
 export interface LatencyMeasurement {
   ttftMs: number;      // Time to First Token
@@ -108,7 +109,31 @@ function generateTestPrompt(tokenCount: number): string {
     "What factors affect the training time of large language models?",
   ];
   
-  const basePrompt = templates[Math.floor(Math.random() * templates.length)];
+  // Note: This is a module-level function for backwards compatibility
+  // The actual deterministic selection is done via instance method
+  const basePrompt = templates[0]; // Default fallback
+  const filler = "Please provide comprehensive details, examples, and explanations. ";
+  const repeats = Math.ceil(targetWords / 10);
+  
+  return basePrompt + filler.repeat(repeats).substring(0, tokenCount * 4);
+}
+
+/**
+ * Generate test prompt with deterministic randomness based on token count.
+ */
+export function generateTestPromptDeterministic(tokenCount: number, rng: DeterministicRandom): string {
+  const wordsPerToken = 0.75; // Approximate
+  const targetWords = Math.floor(tokenCount * wordsPerToken);
+  
+  const templates = [
+    "Explain the concept of machine learning in detail.",
+    "What are the key differences between supervised and unsupervised learning?",
+    "Describe how neural networks process information through layers.",
+    "Discuss the importance of data preprocessing in AI pipelines.",
+    "What factors affect the training time of large language models?",
+  ];
+  
+  const basePrompt = templates[rng.randomInt(0, templates.length - 1)];
   const filler = "Please provide comprehensive details, examples, and explanations. ";
   const repeats = Math.ceil(targetWords / 10);
   
@@ -125,12 +150,14 @@ export class DeepSeekLatencyProber {
   private baseUrl: string;
   private model: string;
   private simulator: EnhancedPDServingSimulator;
+  private rng: DeterministicRandom;
 
-  constructor(apiKey: string, baseUrl = "https://api.deepseek.com", model = "deepseek-chat") {
+  constructor(apiKey: string, baseUrl = "https://api.deepseek.com", model = "deepseek-chat", seed?: number) {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
     this.model = model;
     this.simulator = new EnhancedPDServingSimulator();
+    this.rng = new DeterministicRandom(seed ?? 42);
   }
 
   /**

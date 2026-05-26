@@ -7,7 +7,7 @@
 import { inferEngineFromMetricNames } from "./EngineProvider.ts";
 import type { NormalizedEngineMetrics } from "./EngineBenchmarkTypes.ts";
 import type { PrometheusMetricMap } from "./PrometheusMetricsParser.ts";
-import { histogram, maxMetric, sumMetric } from "./VllmMetricsAdapter.ts";
+import { histogram, maxMetric, sumMetric } from "./MetricsUtils.ts";
 
 export function normalizeSglangMetrics(metrics: PrometheusMetricMap, scrapedAt = new Date().toISOString()): NormalizedEngineMetrics {
   const names = [...metrics.keys()];

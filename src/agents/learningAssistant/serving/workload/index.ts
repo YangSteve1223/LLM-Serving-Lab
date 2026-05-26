@@ -1,14 +1,15 @@
 /**
  * Workload Module Index
  * 
- * Exports all workload modeling components.
+ * Exports all workload modeling components for LLM serving scenarios.
  */
 export { 
-  EducationalWorkloadModel,
+  ServingWorkloadModel,
   createTypicalWorkload,
   createHeavyWorkload,
   createLightWorkload
-} from "./EducationalWorkloadModel.ts";
+} from "./ServingWorkloadModel.ts";
+
 export type {
   TaskType,
   ArrivalPattern,
@@ -16,4 +17,4 @@ export type {
   WorkloadConfig,
   SyntheticRequest,
   WorkloadAnalysis
-} from "./EducationalWorkloadModel.ts";
+} from "./ServingWorkloadModel.ts";

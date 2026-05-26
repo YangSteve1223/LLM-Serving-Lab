@@ -7,9 +7,10 @@
  */
 import { assistantSystemPrompt } from "../prompts/assistantSystemPrompt.ts";
 import type { EvidenceCandidate, LearningContext } from "../types.ts";
-import { TokenEstimator } from "./TokenEstimator.ts";
+import { exactTokenEstimator } from "./ExactTokenEstimator.ts";
 import { hashText, stableJson } from "./PromptComponentHasher.ts";
-import { normalizePromptCanonicalizationMode, type PromptCanonicalizationMode } from "./PromptCanonicalizationPolicy.ts";
+
+export type PromptCanonicalizationMode = "cache_first" | "eager" | "standard";
 
 export type PromptComponent = {
   name:
@@ -49,7 +50,6 @@ export type CacheAwarePromptPlan = {
 };
 
 export class CacheAwarePromptBuilder {
-  private estimator = new TokenEstimator();
 
   plan(input: {
     originalPrompt: string;
@@ -58,7 +58,7 @@ export class CacheAwarePromptBuilder {
     selectedEvidence?: EvidenceCandidate[];
     mode?: PromptCanonicalizationMode;
   }): CacheAwarePromptPlan {
-    const mode = normalizePromptCanonicalizationMode(input.mode);
+    const mode = input.mode ?? "standard";
     const components = this.components(input);
     const stablePrefix = components.filter((component) => component.cacheable).map(formatComponent).join("\n\n");
     const dynamicSuffix = components.filter((component) => !component.cacheable).map(formatComponent).join("\n\n");
@@ -135,7 +135,7 @@ export class CacheAwarePromptBuilder {
     return {
       name,
       text: clean,
-      estimatedTokens: this.estimator.estimateTokens(clean),
+      estimatedTokens: exactTokenEstimator.estimate(clean),
       hash: hashText(clean),
       cacheable,
       volatility

@@ -8,6 +8,8 @@
 
 LLM Serving Lab is a research platform for studying and optimizing Large Language Model (LLM) inference serving. It provides comprehensive simulation, benchmarking, and calibration tools for modern serving architectures.
 
+**No GPU is required** — all modules run in pure TypeScript simulation mode. Real TTFT/ITL/E2E require a streaming endpoint (e.g., vLLM, SGLang, or an OpenAI-compatible API).
+
 ### Key Features
 
 - **Prefill/Decode (PD) Separation Simulation** - Model disaggregated serving with hierarchical KV cache transfer

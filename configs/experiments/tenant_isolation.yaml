@@ -1,0 +1,64 @@
+# Multi-tenant SLO Isolation Configuration
+# Evaluates isolation guarantees for gold/silver/bronze tenant tiers
+
+id: tenant_isolation
+name: Multi-tenant SLO Isolation
+description: Evaluate isolation guarantees for gold/silver/bronze tenant tiers
+seed: 42
+
+workload:
+  requestCount: 150
+  tokenDistribution: realistic
+  avgPromptTokens: 1024
+  avgCompletionTokens: 256
+  qps: 15
+  duration: "60s"
+  variance: 0.4
+
+simulator:
+  architecture: pd_separated
+  prefillGpu:
+    gpuType: compute_heavy
+    numGpus: 2
+  decodeGpu:
+    gpuType: memory_heavy
+    numGpus: 4
+  kvTransferMs: 3
+
+cache:
+  type: radix
+  capacityMB: 2048
+  blockSizeTokens: 64
+  evictionPolicy: flop_aware
+  enableCompression: true
+
+scheduler:
+  type: slo_aware
+  maxBatchSize: 16
+  stepBudgetMs: 100
+  sloTargetMs: 2000
+  slo:
+    ttftMs: 2000
+    tpotMs: 150
+    e2eMs: 20000
+
+statistical:
+  repetitions: 10
+  warmupIterations: 5
+  confidenceLevel: 0.95
+  significanceThreshold: 0.05
+
+enableChunkedPrefill: true
+chunkSize: 512
+enableTenantIsolation: true
+
+tenantTiers:
+  - name: gold
+    sloTargetMs: 1000
+    weight: 1.0
+  - name: silver
+    sloTargetMs: 2000
+    weight: 0.7
+  - name: bronze
+    sloTargetMs: 5000
+    weight: 0.4

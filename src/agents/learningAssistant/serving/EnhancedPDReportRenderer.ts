@@ -14,6 +14,7 @@ import type {
   EnhancedPDConfig,
   ContinuousBatchingPolicy
 } from "./ServingTrace.ts";
+import { round } from "./utils/MathUtils.ts";
 
 /**
  * Render enhanced PD simulation report.
@@ -406,10 +407,6 @@ function formatUtil(result: PDSimulationResult): string {
     return `mono ${formatPct(result.utilization.monolithicUtilization)}`;
   }
   return `prefill ${formatPct(result.utilization.prefillUtilization)}, decode ${formatPct(result.utilization.decodeUtilization)}`;
-}
-
-function round(value: number): number {
-  return Math.round(value * 100) / 100;
 }
 
 export { triple, formatPct, formatUtil, round };

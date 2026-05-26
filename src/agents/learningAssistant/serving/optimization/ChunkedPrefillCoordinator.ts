@@ -11,6 +11,7 @@
 import { createHash } from "node:crypto";
 import type { CacheEntry } from "./cache/RadixPrefixCacheManager.ts";
 import type { PrefillChunk, EnhancedPDWorkloadRequest } from "./ServingTrace.ts";
+import { round } from "./utils/MathUtils.ts";
 
 // ==================== Types ====================
 
@@ -70,11 +71,6 @@ const DEFAULT_CHUNK_CONFIG: ChunkedPrefillConfig = {
 };
 
 // ==================== Helper Functions ====================
-
-function round(value: number, decimals: number = 2): number {
-  const factor = Math.pow(10, decimals);
-  return Math.round(value * factor) / factor;
-}
 
 function computeCumulativeHash(tokens: number[]): string {
   const hash = createHash("sha256");
