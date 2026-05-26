@@ -14,7 +14,7 @@
     "test:demo-ux": "node tests/TEST-DEMO-UX/run-test-demo-ux.ts",
     "test:future-school": "node tests/TEST-FUTURE-SCHOOL/run-test-future-school.ts",
     "test:learning-loop-quality": "node tests/TEST-LEARNING-LOOP-QUALITY/run-test-learning-loop-quality.ts",
-    "test:serving": "node --test tests/serving/*.test.ts tests/serving/engine/*.test.ts",
+    "test:serving": "node --test tests/serving/*.test.ts tests/serving/engine/*.test.ts tests/serving/optimization/*.test.ts",
     "test:enhanced-pd": "node --test tests/serving/enhanced-pd-simulator.test.ts tests/serving/enhanced-pd-report-renderer.test.ts",
     "test:continuous-batching": "node --test tests/serving/continuous-batching-scheduler.test.ts",
     "test:exact-token": "node --test tests/serving/exact-token-estimator.test.ts",
