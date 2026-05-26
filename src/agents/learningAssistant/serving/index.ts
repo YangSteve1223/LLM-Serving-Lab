@@ -49,3 +49,15 @@ export type {
   ServingPhaseTrace,
   ServingSLO
 } from "./ServingTrace.ts";
+
+// ==================== Enhanced PD Simulator ====================
+export { EnhancedPDServingSimulator, enhancedPDServingSimulator } from "./EnhancedPDServingSimulator.ts";
+export type { EnhancedSimulatorStats } from "./EnhancedPDServingSimulator.ts";
+export { renderEnhancedPDReport, renderContinuousBatchingReport, renderKVTransferAnalysis, renderChunkedPrefillAnalysis, renderHeterogeneousAllocationAnalysis } from "./EnhancedPDReportRenderer.ts";
+
+// ==================== Continuous Batching Scheduler ====================
+export { ContinuousBatchingScheduler, continuousBatchingScheduler } from "./ContinuousBatchingScheduler.ts";
+export type { ContinuousBatchingPolicy, SchedulerConfig } from "./ContinuousBatchingScheduler.ts";
+
+// ==================== Exact Token Estimator ====================
+export { ExactTokenEstimator, BPETokenizer, createExactTokenEstimator, exactTokenEstimator, bpeTokenEstimator, tiktokenEstimator, estimateTokensExact } from "./ExactTokenEstimator.ts";
