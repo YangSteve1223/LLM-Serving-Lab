@@ -122,3 +122,130 @@ The PD simulator remains a what-if tool: it estimates TTFT, TPOT/ITL, queueing, 
 The SOTA Engine Bridge is the optional real-engine path. It can call an OpenAI-compatible streaming endpoint, scrape vLLM/SGLang Prometheus metrics, and compare context policies with real TTFT/ITL/E2E when the endpoint supports SSE streaming. Without a GPU endpoint, `npm run benchmark:engine` still runs in dry-run mode and reports workload/prompt statistics only.
 
 Use the simulator to explore scheduling and SLO hypotheses. Use the engine bridge to calibrate those hypotheses against actual vLLM/SGLang behavior.
+
+## Enhanced PD Simulator (feat/pd-infra)
+
+The enhanced PD simulator (`src/agents/learningAssistant/serving/EnhancedPDServingSimulator.ts`) adds advanced cost modeling:
+
+### Key Features
+
+1. **Hierarchical KV Cache Transfer Modeling**
+   - Layer-by-layer pipelined KV transfer simulation
+   - Model-specific KV size estimation (e.g., Llama-70B: 0.64MB/token/layer)
+   - Bandwidth-aware transfer time calculation
+
+2. **Chunked Prefill Scheduling (SARATHI-style)**
+   - Breaks long prefill into configurable chunks (default: 512 tokens)
+   - Eliminates head-of-line blocking
+   - Better GPU utilization through interleaving
+
+3. **Heterogeneous Resource Allocation**
+   - Prefill: compute-heavy GPU allocation
+   - Decode: memory-heavy GPU allocation
+   - Configurable budget ratios
+
+### Usage
+
+```typescript
+import { EnhancedPDServingSimulator } from './serving/index.ts';
+
+const simulator = new EnhancedPDServingSimulator({
+  modelName: 'llama-70b',
+  numLayers: 80,
+  kvSizePerTokenMB: 0.64,
+  chunkedPrefill: { enabled: true, chunkSize: 512, allowInterleaving: true },
+  prefillBudgetRatio: 0.4,
+  decodeBudgetRatio: 0.6
+});
+
+// Run enhanced simulation
+const result = simulator.simulateEnhancedPD(workload);
+
+// Compare policies
+const results = simulator.compareEnhancedPolicies(workload);
+```
+
+## Continuous Batching Scheduler
+
+The continuous batching scheduler (`src/agents/learningAssistant/serving/ContinuousBatchingScheduler.ts`) provides iteration-level scheduling:
+
+### Features
+
+- **Three scheduling policies**: FCFS, SJF, SLO-aware
+- **Dynamic request management**: Add/remove requests from batch at each step
+- **SLO-aware decisions**: TTFT/TPOT/E2E constraints
+- **Integration with PD Simulator**: Validate scheduling policies
+
+### Usage
+
+```typescript
+import { ContinuousBatchingScheduler } from './serving/index.ts';
+
+const scheduler = new ContinuousBatchingScheduler();
+
+scheduler.configure({
+  maxBatchSize: 16,
+  stepBudgetMs: 100,
+  policy: 'slo_aware'
+});
+
+// Run scheduling simulation
+const result = scheduler.runScheduling(workload, 'slo_aware');
+
+// Compare all policies
+const results = scheduler.comparePolicies(workload);
+```
+
+## Exact Token Estimator
+
+The exact token estimator (`src/agents/learningAssistant/serving/ExactTokenEstimator.ts`) provides multiple tokenization methods:
+
+### Features
+
+- **Heuristic estimation**: Original method
+- **BPE tokenization**: Lightweight byte-pair encoding
+- **Tiktoken-style**: Approximated tiktoken behavior
+- **Model-specific**: GPT-4, LLaMA, etc.
+- **Comparison interface**: Error analysis across methods
+
+### Usage
+
+```typescript
+import { ExactTokenEstimator, estimateTokensExact } from './serving/index.ts';
+
+// Quick estimation
+const count = estimateTokensExact('Hello world', 'tiktoken');
+
+// Full comparison
+const estimator = new ExactTokenEstimator({ estimatorType: 'tiktoken' });
+const comparison = estimator.compare('Your text here');
+```
+
+## Report Rendering
+
+Enhanced reports with detailed analysis:
+
+```typescript
+import { 
+  renderEnhancedPDReport,
+  renderContinuousBatchingReport,
+  renderKVTransferAnalysis,
+  renderChunkedPrefillAnalysis
+} from './serving/index.ts';
+
+// Generate reports
+const pdReport = renderEnhancedPDReport(results, config);
+const cbReport = renderContinuousBatchingReport(cbResults);
+const kvAnalysis = renderKVTransferAnalysis(80, 0.64, 1000, 50);
+```
+
+## Testing
+
+Run the PD-infra tests:
+
+```bash
+npm run test:pd-infra    # All new tests
+npm run test:enhanced-pd  # Enhanced simulator tests
+npm run test:continuous-batching # Scheduler tests
+npm run test:exact-token  # Token estimator tests
+```

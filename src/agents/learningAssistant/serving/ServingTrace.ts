@@ -140,3 +140,157 @@ export type PDSimulationResult = {
   };
   notes: string[];
 };
+
+// ==================== Enhanced PD Simulator Types ====================
+
+export type GPUConfig = {
+  gpuType: "compute_heavy" | "memory_heavy" | "balanced";
+  flopsTFLOPS?: number; // Peak FLOPs in TFLOPs/s
+  memoryBWGBps?: number; // Memory bandwidth in GB/s
+  ibBandwidthGBps?: number; // Interconnect bandwidth in GB/s (for PD transfer)
+  kvCachePerLayerMB?: number; // KV cache size per layer per token in MB
+};
+
+export type NetworkTopology = {
+  prefillToDecodeIBBandwidthGBps: number; // IB bandwidth between prefill and decode
+  numNetworkHops: number; // Number of network hops
+};
+
+export type ChunkedPrefillConfig = {
+  enabled: boolean;
+  chunkSize: number; // tokens per chunk
+  allowInterleaving: boolean; // Allow decode between prefill chunks
+};
+
+export type EnhancedPDConfig = PDSimulationConfig & {
+  // Model parameters
+  modelName?: string;
+  numLayers?: number;
+  kvSizePerTokenMB?: number; // KV cache size per token per layer in MB (e.g., Llama-70B ≈ 0.64MB per token per layer)
+  
+  // GPU and network configuration
+  prefillGPU?: GPUConfig;
+  decodeGPU?: GPUConfig;
+  networkTopology?: NetworkTopology;
+  
+  // Chunked prefill
+  chunkedPrefill?: ChunkedPrefillConfig;
+  
+  // Heterogeneous resource allocation
+  prefillBudgetRatio?: number; // Budget ratio for prefill instances (0-1)
+  decodeBudgetRatio?: number; // Budget ratio for decode instances (0-1)
+};
+
+export type LayerKVTransferEvent = {
+  layer: number;
+  transferStartMs: number;
+  transferEndMs: number;
+  transferSizeMB: number;
+};
+
+export type PrefillChunk = {
+  chunkIndex: number;
+  startToken: number;
+  endToken: number;
+  computeMs: number;
+  transferMs: number;
+  completedLayers: number;
+};
+
+export type EnhancedPDWorkloadRequest = PDWorkloadRequest & {
+  chunks?: PrefillChunk[];
+  layerTransfers?: LayerKVTransferEvent[];
+  effectiveTTFTMs?: number;
+  prefillComputeMs?: number;
+  kvTransferTimeMs?: number;
+  chunkedPrefillEnabled?: boolean;
+};
+
+export type SchedulingDecision = {
+  type: "prefill_chunk" | "decode_step" | "idle";
+  requestId: string;
+  chunkIndex?: number;
+  tokensProcessed?: number;
+  timestampMs: number;
+  remainingBudget: number;
+};
+
+export type BatchState = {
+  activeRequests: string[];
+  pendingPrefill: string[];
+  decodingRequests: string[];
+  completedRequests: string[];
+  currentStep: number;
+  totalBudgetMs: number;
+  usedBudgetMs: number;
+};
+
+export type ContinuousBatchingResult = {
+  policyName: "fcfs" | "sjf" | "slo_aware";
+  requestCount: number;
+  goodput: number;
+  latency: {
+    ttftP50: number;
+    ttftP90: number;
+    ttftP99: number;
+    tpotP50: number;
+    tpotP90: number;
+    tpotP99: number;
+    e2eP50: number;
+    e2eP90: number;
+    e2eP99: number;
+  };
+  schedulingDecisions: SchedulingDecision[];
+  batchStats: {
+    avgBatchSize: number;
+    maxBatchSize: number;
+    prefillChunksProcessed: number;
+    decodeStepsExecuted: number;
+  };
+  notes: string[];
+};
+
+// ==================== Exact Token Estimator Types ====================
+
+export type TokenEstimatorType = "heuristic" | "bpe" | "tiktoken" | "exact";
+
+export type TokenEstimateResult = {
+  estimatorType: TokenEstimatorType;
+  tokenCount: number;
+  confidence: number; // 0-1
+  details?: {
+    vocabSize?: number;
+    numOperations?: number;
+    bpeMerges?: number;
+  };
+};
+
+export type TokenEstimateComparison = {
+  text: string;
+  truncatedText?: string;
+  estimates: TokenEstimateResult[];
+  maxDifference: number;
+  avgDifference: number;
+  mostAccurate: TokenEstimatorType;
+};
+
+// BPETokenizer types
+export type BPEToken = {
+  id: number;
+  text: string;
+  frequency: number;
+};
+
+export type BPETrainingConfig = {
+  vocabSize: number;
+  minFrequency: number;
+  maxIterations: number;
+};
+
+export type ExactTokenEstimatorConfig = {
+  estimatorType: TokenEstimatorType;
+  modelName?: string; // For exact tokenizer (e.g., "gpt-4", "llama-3")
+  bpeVocabPath?: string;
+  bpeMergesPath?: string;
+  enableComparison?: boolean;
+};
