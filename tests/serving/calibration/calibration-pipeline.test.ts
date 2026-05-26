@@ -6,8 +6,8 @@ import assert from 'node:assert';
 import {
   CalibrationPipeline,
   createCalibrationPipeline
-} from '../../src/agents/learningAssistant/serving/calibration/CalibrationPipeline.ts';
-import type { PDWorkloadRequest } from '../../src/agents/learningAssistant/serving/ServingTrace.ts';
+} from '../../../src/agents/learningAssistant/serving/calibration/CalibrationPipeline.ts';
+import type { PDWorkloadRequest } from '../../../src/agents/learningAssistant/serving/ServingTrace.ts';
 
 describe('CalibrationPipeline', () => {
   let pipeline: CalibrationPipeline;
@@ -145,9 +145,13 @@ describe('CalibrationPipeline', () => {
       const md = pipeline.generateMarkdownReport(report);
 
       for (const stage of report.stages) {
+        // Markdown uses Title Case: "Component Calibration", "Scheduling Calibration", etc.
+        const titleCase = stage.stage.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
         assert.ok(
-          md.includes(stage.stage) || md.includes(stage.stage.replace(/_/g, ' ')),
-          `should mention stage: ${stage.stage}`
+          md.includes(stage.stage) ||
+          md.includes(stage.stage.replace(/_/g, ' ')) ||
+          md.includes(titleCase),
+          `should mention stage: ${stage.stage} (checked: ${titleCase})`
         );
       }
     });
